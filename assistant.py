@@ -144,10 +144,10 @@ def help_study():
 
 def main():
     WEATHER_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY"
-    speak("Hello! I'm your AI assistant.")
+    speak("Hello! I'm Ishu.")
 
     while True:
-        speak("What can I do for you?")
+        speak("Ishu is waiting for you.")
         query = listen().lower()
         if not query:
             speak("Sorry, I didn't catch that. Can you repeat?")
