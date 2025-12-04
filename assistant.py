@@ -28,13 +28,26 @@ def listen():
     r = sr.Recognizer()
     with sr.Microphone() as source:
         print("Listening...")
+        r.adjust_for_ambient_noise(source)
         audio = r.listen(source)
         try:
             result = r.recognize_google(audio)
             print(f"User said: {result}")  # Debug print
             return result
+        except sr.UnknownValueError:
+            print("Google Speech Recognition could not understand audio")
+            return ""
+        except sr.RequestError as e:
+            print(f"Could not request results from Google Speech Recognition service; {e}")
+            return ""
         except Exception:
             return ""
+
+def listen_written():
+    """Captures input from the keyboard."""
+    result = input("Write your command: ").lower()
+    print(f"User said: {result}")
+    return result
 
 def load_json(filename, default):
     try:
@@ -147,11 +160,24 @@ def main():
     speak("Hello! I'm Ishu.")
 
     while True:
-        speak("Ishu is waiting for you.")
-        query = listen().lower()
-        if not query:
-            speak("Sorry, I didn't catch that. Can you repeat?")
+        # --- NEW INPUT CHOICE LOGIC ---
+        print("\nChoose input mode: (S)peech or (W)ritten")
+        mode = input("Enter S or W: ").upper().strip()
+
+        query = ""
+        if mode == 'S':
+            speak("Ishu is waiting for you. Speaking mode active.")
+            query = listen().lower()
+            if not query:
+                speak("Sorry, I didn't catch that. Can you repeat?")
             continue
+        elif mode == 'W':
+            print("Ishu is waiting for you. Written mode active.")
+            query = listen_written()
+        else:
+            print("Invalid input. Please enter S or W.")
+            continue
+        # ------------------------------
 
         if "routine" in query:
             speak(get_routine())
@@ -180,8 +206,19 @@ def main():
         elif "story" in query:
             speak(tell_story())
         elif "weather" in query:
-            speak("Which city?")
-            city = listen().lower()
+            # If in speech mode, prompt for city
+            if mode == 'S':
+                speak("Which city?")
+                city = listen().lower()
+            # If in written mode, try to extract city from the query
+            elif mode == 'W':
+                # Simple extraction, e.g., "weather in london"
+                parts = query.split('weather in')
+                city = parts[1].strip() if len(parts) > 1 else 'unknown'
+                if city == 'unknown':
+                    print("Please specify the city.")
+                    city = input("Which city?: ").lower()
+                    
             speak(get_weather(city, WEATHER_API_KEY))
         elif "study" in query or "help me in studies" in query:
             speak(help_study())
