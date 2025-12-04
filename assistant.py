@@ -5,6 +5,7 @@ import requests
 import json
 from datetime import datetime, time
 import re
+import random
 
 # ========== Helper functions ==========
 
@@ -134,7 +135,7 @@ def tell_story():
         "Long ago, an ambitious student learned Python and created a talking assistant.",
         "Once, a robot discovered it could dream about electric sheep."
     ]
-    return stories[0]  # You can randomize or cycle through these
+    return random.choice(stories)  # It's now randomize or cycle through these
 
 def get_weather(city, api_key):
     try:
