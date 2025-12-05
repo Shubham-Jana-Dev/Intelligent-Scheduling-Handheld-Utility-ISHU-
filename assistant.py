@@ -6,6 +6,7 @@ from datetime import datetime, time
 import re
 import random
 import subprocess 
+import pyjokes
 
 # ========== Helper functions ==========
 
@@ -139,11 +140,11 @@ def set_favorite_color(color):
 
 def tell_joke():
     try:
-        r = requests.get("https://icanhazdadjoke.com/", headers={"Accept": "application/json"})
-        if r.status_code == 200:
-            return r.json()["joke"]
-    except:
-        pass
+        # Get a random joke from pyjokes
+        return pyjokes.get_joke()
+    except Exception as e:
+        print(f"Error fetching joke from pyjokes: {e}")
+        # Fallback to the original hardcoded joke
     return "Why do programmers prefer dark mode? Because light attracts bugs."
 
 def tell_story():
