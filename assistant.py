@@ -1,29 +1,46 @@
 import speech_recognition as sr
-from gtts import gTTS
 import os
 import requests
 import json
 from datetime import datetime, time
 import re
 import random
+import subprocess 
 
 # ========== Helper functions ==========
 
-def speak(text):
-    tts = gTTS(text)
-    tts.save("tmp.mp3")
-    # Use 'afplay' for Mac, 'mpg123' for Raspberry Pi/Linux
-    if os.name == "posix":
+# --- RASPBERRY PI NOTE START ---
+# NOTE for Raspberry Pi TTS:
+# The Mac 'say' command is fast and local, but won't work on Pi.
+# For Pi, consider using PicoTTS or Piper TTS (high quality, local).
+# Example Piper command: os.system(f"echo '{text}' | piper --model [path/to/model] | aplay")
+# --- RASPBERRY PI NOTE END ---
+
+def speak(text, blocking=False):
+    """
+    Handles text-to-speech using the fast, local Mac 'say' command via subprocess.
+    This function has been streamlined for macOS development.
+    """
+    print(f"Ishu says: {text}")
+    
+    # Mac/Darwin specific code using 'say' command
+    if os.name == "posix" and os.uname().sysname == "Darwin":
         try:
-            if os.uname().sysname == "Darwin":
-                os.system("afplay tmp.mp3")
+            # Added shell=True for simple execution in some environments
+            command = ['say', text]
+            if blocking:
+                # Waits for the speech to finish (blocking)
+                subprocess.run(command)
             else:
-                os.system("mpg123 tmp.mp3")
-        except AttributeError:
-            os.system("mpg123 tmp.mp3")
+                # Starts the speech and moves on (non-blocking)
+                subprocess.Popen(command) 
+        except FileNotFoundError:
+            print("Warning: Mac 'say' command not found. Speech failed.")
+            
+    # Placeholder/Error message for non-Mac/Pi environments
     else:
-        os.system("start tmp.mp3")  # For Windows if needed
-    os.remove("tmp.mp3")
+        print("TTS currently configured for macOS 'say' command. Speech unavailable.")
+
 
 def listen():
     r = sr.Recognizer()
@@ -168,10 +185,11 @@ def main():
 
         query = ""
         if mode == 'S':
-            speak("Ishu is waiting for you. Speaking mode active.")
+            speak("Ishu is waiting for you. Speaking mode active.", blocking=True)
             query = listen().lower()
+            
             if not query:
-                speak("Sorry, I didn't catch that. Can you repeat?")
+                speak("Sorry, I didn't catch that. Can you repeat?", blocking=True)
                 continue
         elif mode == 'W':
             print("Ishu is waiting for you. Written mode active.")
@@ -195,6 +213,8 @@ def main():
                 speak(set_favorite_color(color))
             else:
                 speak(get_favorite())
+
+        
         elif "what should i do in this time" in query or "what should i do now" in query:
             speak(get_task_by_time())
         elif "what should i do at" in query:
