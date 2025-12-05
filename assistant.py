@@ -172,7 +172,7 @@ def main():
             query = listen().lower()
             if not query:
                 speak("Sorry, I didn't catch that. Can you repeat?")
-            continue
+                continue
         elif mode == 'W':
             print("Ishu is waiting for you. Written mode active.")
             query = listen_written()
@@ -180,6 +180,8 @@ def main():
             print("Invalid input. Please enter S or W.")
             continue
         # ------------------------------
+
+        # --- COMMAND HANDLING LOGIC ---
 
         if "routine" in query:
             speak(get_routine())
@@ -208,6 +210,7 @@ def main():
         elif "story" in query:
             speak(tell_story())
         elif "weather" in query:
+            city = ""
             # If in speech mode, prompt for city
             if mode == 'S':
                 speak("Which city?")
@@ -220,10 +223,15 @@ def main():
                 if city == 'unknown':
                     print("Please specify the city.")
                     city = input("Which city?: ").lower()
-                    
-            speak(get_weather(city, WEATHER_API_KEY))
-        elif "study" in query or "help me in studies" in query:
-            speak(help_study())
+
+            # Check if city was captured before calling the API    
+            if city and city != 'unknown':   
+                speak(get_weather(city, WEATHER_API_KEY))
+            elif city == 'unknown':
+                speak("I need a city name to check the weather.")
+
+            elif "study" in query or "help me in studies" in query:
+                speak(help_study())
         elif "thank you" in query:
             speak("Mention not! Have a great day!")
             break
