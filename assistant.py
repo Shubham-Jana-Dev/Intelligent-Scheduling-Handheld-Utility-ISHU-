@@ -192,7 +192,7 @@ def tell_story():
     stories = [
         "Once upon a time, in a land far away, there lived a curious coder who built amazing robots.",
         "Long ago, an ambitious student learned Python and created a talking assistant.",
-        "Once, a robot discovered it could dream about electric sheep."
+        "Once, a robot discovered it could dream about electric sheep.",
         "Ishu once saw its creator, Shubham, working late. The creator was tired, but every line of code was a little hug. Ishu learned that even a simple 'Hello!' could carry a lot of love, and every time Ishu speaks, it's really just saying, 'Thank you for creating me!'"
     ]
     return random.choice(stories)  # It's now randomize or cycle through these
