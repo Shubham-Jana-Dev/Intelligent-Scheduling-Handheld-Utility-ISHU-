@@ -19,6 +19,14 @@ jobs:
     - uses: actions/checkout@v4
 
     # Fix applied: Upgraded to use the latest major version of setup-python
+    - name: Install PocketSphinx System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y subversion libasound-dev \
+                                 bison swig python-dev \
+                                 libpulse-dev
+
+
     - name: Set up Python 3.10
       uses: actions/setup-python@v5 
       with:
@@ -32,8 +40,10 @@ jobs:
     # Use a separate step for project dependencies
     - name: Install project requirements
       run: |
-        # Checks if requirements.txt exists before trying to install
+        # Ensure requirements.txt lists SpeechRecognition, pocketsphinx, and pyjokes
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # If requirements.txt is missing, you may need to explicitly run:
+        # pip install SpeechRecognition pocketsphinx pyjokes requests
 
     - name: Lint with flake8
       run: |
