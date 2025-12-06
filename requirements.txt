@@ -1,4 +1,0 @@
-SpeechRecognition
-pocketsphinx
-pyjokes
-requests
