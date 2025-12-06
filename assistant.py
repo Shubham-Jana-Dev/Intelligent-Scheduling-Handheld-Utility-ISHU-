@@ -94,7 +94,7 @@ def listen():
             # RequestError is typically for online services, but included for completeness
             print(f"Sphinx error; {e}")
             return ""
-        except Exception:
+        except Exception as e:
             # Sphinx will raise an exception if it's not installed or configured correctly
             print(f"General error during Sphinx recognition: {e}")
             return ""
