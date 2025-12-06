@@ -2,3 +2,7 @@ SpeechRecognition
 pocketsphinx
 pyjokes
 requests
+openai-whisper  
+torch           
+torchaudio      
+numpy           
