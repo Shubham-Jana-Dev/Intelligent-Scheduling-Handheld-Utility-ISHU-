@@ -7,7 +7,21 @@ import re
 import random
 import subprocess 
 import pyjokes
+import whisper # <<< NEW IMPORT
+import time as time_lib # <<< NEW IMPORT
 
+# ==============================
+# 1. WHISPER CONFIGURATION
+# ==============================
+
+# Ensure the whisper model is loaded once at the start
+# NOTE: The 'base' model offers a good balance of accuracy and speed.
+try:
+    WHISPER_MODEL = whisper.load_model("base") 
+except Exception as e:
+    print(f"Error loading Whisper model: {e}")
+    WHISPER_MODEL = None
+    
 # ========== Helper functions ==========
 
 # --- RASPBERRY PI NOTE START ---
@@ -71,33 +85,49 @@ def speak(text, blocking=False):
         print("TTS currently configured for macOS 'say' command. Speech unavailable.")
 
 
-def listen():
+def listen_whisper():
+    """Records audio and uses Whisper for high-accuracy transcription."""
     r = sr.Recognizer()
+    # Use a temporary file name
+    temp_audio_file = "temp_audio.wav" 
     with sr.Microphone() as source:
-        print("Listening...")
+        print("Whisper Listening...") # Updated message
         r.adjust_for_ambient_noise(source)
-        audio = r.listen(source)
         try:
-            # --- CHANGE THIS LINE ---
-            # result = r.recognize_google(audio)  # OLD: Online method
+            audio = r.listen(source)
+        except sr.WaitTimeoutError:
+            print("No speech detected within the timeout period.")
+            return ""
             
-            # --- TO THIS LINE ---
-            # NEW: Offline method using PocketSphinx
-            result = r.recognize_sphinx(audio)
+    try:
+        # --- CHANGE THIS LINE ---
+        # result = r.recognize_google(audio)  # OLD: Online method
+            
+        # --- TO THIS LINE ---
+        # NEW: Offline method using PocketSphinx
+        with open(temp_audio_file, "wb") as f:
+            f.write(audio.get_wav_data())
+
+            # 2. Use Whisper to transcribe the file
+        if WHISPER_MODEL:
+            print("Transcribing with Whisper...")
+            # Use 'fp16=False' for better compatibility on Mac CPUs/older GPUs
+            result = WHISPER_MODEL.transcribe(temp_audio_file, fp16=False) 
+            text = result["text"].strip()
             print(f"User said: {result}")  # Debug print
-            return result
-        except sr.UnknownValueError:
-            # Update the message to reflect the new engine
-            print("PocketSphinx could not understand audio")
+            return text
+        else:
+            print("Whisper model not loaded.")
             return ""
-        except sr.RequestError as e:
-            # RequestError is typically for online services, but included for completeness
-            print(f"Sphinx error; {e}")
-            return ""
-        except Exception as e:
-            # Sphinx will raise an exception if it's not installed or configured correctly
-            print(f"General error during Sphinx recognition: {e}")
-            return ""
+            
+    except Exception as e:
+        print(f"Whisper/Audio error; {e}")
+        return ""
+    finally:
+        # Clean up the temporary file
+        if os.path.exists(temp_audio_file):
+            os.remove(temp_audio_file)
+
 
 def listen_written():
     """Captures input from the keyboard."""
@@ -230,7 +260,8 @@ def main():
         if mode == 'S':
             # <<< FIX: speak() is now blocking so the microphone isn't drowned out.
             speak("Ishu is waiting for you. Speaking mode active.", blocking=True)
-            query = listen().lower()
+            # *** CALLING NEW WHISPER FUNCTION ***
+            query = listen_whisper().lower()
             
             if not query:
                 speak("Sorry, I didn't catch that. Can you repeat?", blocking=True)
@@ -279,7 +310,7 @@ def main():
             if mode == 'S':
                 # <<< FIX: ensure this prompt finishes before listening
                 speak("Which city?")
-                city = listen().lower()
+                city = listen_whisper().lower() # *** USE WHISPER HERE TOO ***
             # If in written mode, try to extract city from the query
             elif mode == 'W':
                 # Simple extraction, e.g., "weather in london"
