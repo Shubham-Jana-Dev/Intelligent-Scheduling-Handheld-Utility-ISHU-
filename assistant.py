@@ -21,6 +21,12 @@ try:
 except Exception as e:
     print(f"Error loading Whisper model: {e}")
     WHISPER_MODEL = None
+
+# +++ 2. OLLAMA CONFIGURATION (NEW SECTION) +++
+# ============================================
+OLLAMA_API_URL = "http://localhost:11434/api/generate"
+OLLAMA_MODEL = "phi3" # <<< Recommend using a fast, small model like 'llama3' or 'phi3'
+# ============================================
     
 # ========== Helper functions ==========
 
@@ -100,11 +106,7 @@ def listen_whisper():
             return ""
             
     try:
-        # --- CHANGE THIS LINE ---
-        # result = r.recognize_google(audio)  # OLD: Online method
-            
-        # --- TO THIS LINE ---
-        # NEW: Offline method using PocketSphinx
+        # 1. Save the recorded audio to a temporary file
         with open(temp_audio_file, "wb") as f:
             f.write(audio.get_wav_data())
 
@@ -150,6 +152,40 @@ def save_json(filename, obj):
             json.dump(obj, f)
     except Exception as e:
         print(f"Error saving JSON: {e}")
+
+# +++ NEW FUNCTION: OLLAMA RESPONSE +++
+def ollama_response(prompt):
+    """Sends a prompt to the local Ollama LLM and returns the response."""
+    print(f"Ollama thinking...")
+    
+    # 1. Define the API request payload
+    payload = {
+        "model": OLLAMA_MODEL,
+        "prompt": prompt,
+        "stream": False # Get the full response in one go
+    }
+    
+    try:
+        # 2. Send the request to the Ollama API
+        response = requests.post(OLLAMA_API_URL, json=payload)
+        
+        # 3. Check for successful response
+        if response.status_code == 200:
+            data = response.json()
+            # Ollama returns the generated text in the 'response' key
+            return data.get("response", "Sorry, the LLM returned an empty response.")
+        else:
+            # Handle non-200 status codes (e.g., model not found)
+            return f"Ollama API Error (Code {response.status_code}). Check your model name ({OLLAMA_MODEL})."
+
+    except requests.exceptions.ConnectionError:
+        # Handle the case where the Ollama server is not running
+        return "I can't connect to the local LLM. Please make sure Ollama is running on http://localhost:11434 and the model ('llama3') is pulled."
+    except Exception as e:
+        # Catch all other potential errors
+        print(f"Unexpected Ollama error: {e}")
+        return "An unexpected error occurred while processing the LLM request."
+# +++++++++++++++++++++++++++++++++++++
 
 # ========== Routine Features with Robust Time Logic ==========
 
@@ -334,8 +370,12 @@ def main():
         elif "exit" in query or "quit" in query or "Goodbye" in query or "stop listening" in query:
             speak("Goodbye! Have a great day!")
             break
+
+        # *** NEW: Default Command to Ollama LLM ***
         else:
-            speak("I'm not sure how to help with that. Ask me about your routine, favorite color, jokes, specific times, weather, or studies.")
+            # 8. Ollama LLM Catch-all
+            response_text = ollama_response(query)
+            speak(response_text)
 
 if __name__ == "__main__":
     # NOTE for Pi: Before running on a Raspberry Pi, ensure you have
