@@ -7,8 +7,8 @@ import re
 import random
 import subprocess 
 import pyjokes
-import whisper # <<< NEW IMPORT
-import time as time_lib # <<< NEW IMPORT
+import whisper 
+import time as time_lib 
 
 # ==============================
 # 1. WHISPER CONFIGURATION
@@ -24,10 +24,8 @@ except Exception as e:
 
 # +++ 2. OLLAMA CONFIGURATION (NEW SECTION) +++
 # ============================================
-# 🔥🔥🔥  CHANGED API ENDPOINT TO /api/chat FOR TOOL USE 🔥🔥🔥
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "phi3" # <<< Recommend using a fast, small model like 'llama3' or 'phi3'
-# 🔥🔥🔥  ADDED SYSTEM PROMPT FOR TOOL USE 🔥🔥🔥
 OLLAMA_SYSTEM_PROMPT = "You are Ishu, a helpful and friendly local AI assistant created by Shubham Jana. If a user's request matches one of your available tools, generate a JSON object to call the function. If not, answer the question directly. Always be concise and polite."
 # ============================================
 
@@ -72,7 +70,6 @@ TOOL_DEFINITIONS = [
             },
         },
     },
-    # 🔥🔥🔥 NEW ROUTINE MANAGEMENT TOOLS (COMMIT 6) 🔥🔥🔥
     {
         "type": "function",
         "function": {
@@ -125,7 +122,24 @@ TOOL_DEFINITIONS = [
                 "properties": {},
             },
         },
-    }
+    },
+    # 🔥🔥🔥 NEW TOOL: tell_story (COMMIT 7) 🔥🔥🔥
+    {
+        "type": "function",
+        "function": {
+            "name": "tell_story",
+            "description": "Generates a creative and imaginative story for the user. Provide the topic or subject for the story. The topic argument is optional.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {
+                        "type": "string",
+                        "description": "The specific subject or topic the story should be about (e.g., 'a robot who loves to paint'). This is optional."
+                    }
+                },
+            },
+        },
+    },
 ]
 
 # 🔥🔥🔥 END NEW SECTION 🔥🔥🔥
@@ -256,13 +270,10 @@ def save_json(filename, obj):
         print(f"Error saving JSON: {e}")
 
 # +++ NEW FUNCTION: OLLAMA RESPONSE (MODIFIED FOR TOOL USE) +++
-# 🔥🔥🔥 LINE 201: MODIFIED FUNCTION SIGNATURE TO ACCEPT tools AND history 🔥🔥🔥
 def ollama_response(prompt, tools=None, history=None):
     """Sends a prompt to the local Ollama LLM and returns the response."""
     print(f"Ollama thinking...")
-    
-    # 🔥🔥🔥 LINE 205: DEFINED MESSAGE STRUCTURE FOR CHAT API AND TOOL USE 🔥🔥🔥
-    # 1. Define the API request payload
+
     if history:
         messages = history
     else:
@@ -286,8 +297,7 @@ def ollama_response(prompt, tools=None, history=None):
         # 3. Check for successful response
         if response.status_code == 200:
             data = response.json()
-            # Ollama returns the generated text in the 'response' key for api/chat
-            # 🔥🔥🔥  RETURN THE MESSAGE OBJECT (contains content OR tool_calls) 🔥🔥🔥
+        �
             return data.get("message", {"content":"Sorry, the LLM returned an empty response."})
         else:
             # Handle non-200 status codes (e.g., model not found)
@@ -341,7 +351,6 @@ def get_task_by_time(query_time=None):
             return f"At {query_time}, you should: {slot['activity']}."
     return "No scheduled activity for this time."
 
-# 🔥🔥🔥 NEW FUNCTION: ADD ROUTINE ENTRY (COMMIT 6) 🔥🔥🔥
 def add_routine_entry(start, end, activity):
     """Adds a new routine entry if start/end times are valid (HH:MM)."""
     routine = load_json("routine.json", [])
@@ -369,7 +378,6 @@ def add_routine_entry(start, end, activity):
     
     return f"Success! I have added '{activity}' from {start} to {end} to your routine."
 
-# 🔥🔥🔥 NEW FUNCTION: REMOVE ROUTINE ENTRY (COMMIT 6) 🔥🔥🔥
 def remove_routine_entry(activity_keyword):
     """Removes a routine entry based on a partial match of the activity name."""
     routine = load_json("routine.json", [])
@@ -417,14 +425,21 @@ def tell_joke():
         # Fallback to the original hardcoded joke
     return "Why do programmers prefer dark mode? Because light attracts bugs."
 
-def tell_story():
-    stories = [
-        "Once upon a time, in a land far away, there lived a curious coder who built amazing robots.",
-        "Long ago, an ambitious student learned Python and created a talking assistant.",
-        "Once, a robot discovered it could dream about electric sheep.",
-        "Ishu once saw its creator, Shubham, working late. The creator was tired, but every line of code was a little hug. Ishu learned that even a simple 'Hello!' could carry a lot of love, and every time Ishu speaks, it's really just saying, 'Thank you for creating me!'"
-    ]
-    return random.choice(stories)  # It's now randomize or cycle through these
+def tell_story(topic=""):
+    """
+    Generates a creative story using the Ollama LLM.
+    If a topic is provided, the story will be based on that topic.
+    """
+    if topic:
+        prompt = f"Tell me a short, imaginative story about {topic}. Make the story suitable for a student and end with a gentle lesson."
+    else:
+        prompt = "Tell me a short, imaginative story (about 100 words) focusing on the adventures of a young coder named Ishu. Make the story suitable for a student and end with a gentle lesson."
+    
+    # We call ollama_response without tools here, as we only need the content.
+    response_message = ollama_response(prompt)
+
+    return response_message.get("content", "I'm having trouble thinking of a good story right now.")
+# 🔥🔥🔥 NOTE: The old hardcoded stories list and function are now fully replaced. 🔥🔥🔥
 
 def get_weather(city, api_key):
     try:
@@ -440,8 +455,7 @@ def get_weather(city, api_key):
     except Exception:
         return "Sorry, there was an error fetching the weather."
 
-def help_study():
-    return "I can help you with study tips! Stay organized, practice daily, and don't hesitate to ask questions."
+# 🔥🔥🔥 NOTE: The old 'help_study' function is now removed, as the LLM handles this directly. 🔥🔥🔥
 
 # ========== Main Loop with Smart Routine Feature ==========
 
@@ -456,9 +470,10 @@ def main():
         "tell_joke": tell_joke,
         "set_favorite_color": set_favorite_color,
         "get_favorite": get_favorite,
-        "add_routine_entry": add_routine_entry, # <<< New
-        "remove_routine_entry": remove_routine_entry, # <<< New
-        "get_routine": get_routine, # <<< New, so LLM can read the schedule
+        "add_routine_entry": add_routine_entry, 
+        "remove_routine_entry": remove_routine_entry, 
+        "get_routine": get_routine, 
+        "tell_story": tell_story, # <<< NEW
     }
 
     
@@ -498,8 +513,8 @@ def main():
             else:
                 speak("Please specify the time in HH:MM format.")
        
-        elif "story" in query:
-            speak(tell_story())
+        # 🔥🔥🔥 NOTE: Old 'elif "story" in query' is removed here. 🔥🔥🔥
+        
         elif "weather" in query:
             city = ""
             # If in speech mode, prompt for city
@@ -520,9 +535,9 @@ def main():
                 speak(get_weather(city, WEATHER_API_KEY))
             elif city == 'unknown':
                 speak("I need a city name to check the weather.")
+                
+# 🔥🔥🔥 NOTE: Old 'elif "study" in query' is removed here. 🔥🔥🔥
 
-            elif "study" in query or "help me in studies" in query:
-                speak(help_study())
         elif "thank you" in query:
             speak("Mention not! Have a great day!")
             break
@@ -530,7 +545,7 @@ def main():
             speak("Goodbye! Have a great day!")
             break
 
-        # 🔥🔥🔥  NEW TOOL USE LOGIC AND LLM CATCH-ALL 🔥🔥🔥
+        
         # *** NEW: Default Command to Ollama LLM (with Tool Use) ***
         else:
             history = []
