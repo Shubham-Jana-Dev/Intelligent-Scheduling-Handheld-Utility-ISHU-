@@ -24,10 +24,10 @@ except Exception as e:
 
 # +++ 2. OLLAMA CONFIGURATION (NEW SECTION) +++
 # ============================================
-# 🔥🔥🔥 LINE 40: CHANGED API ENDPOINT TO /api/chat FOR TOOL USE 🔥🔥🔥
+# 🔥🔥🔥  CHANGED API ENDPOINT TO /api/chat FOR TOOL USE 🔥🔥🔥
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "phi3" # <<< Recommend using a fast, small model like 'llama3' or 'phi3'
-# 🔥🔥🔥 LINE 43: ADDED SYSTEM PROMPT FOR TOOL USE 🔥🔥🔥
+# 🔥🔥🔥  ADDED SYSTEM PROMPT FOR TOOL USE 🔥🔥🔥
 OLLAMA_SYSTEM_PROMPT = "You are Ishu, a helpful and friendly local AI assistant created by Shubham Jana. If a user's request matches one of your available tools, generate a JSON object to call the function. If not, answer the question directly. Always be concise and polite."
 # ============================================
 
@@ -71,8 +71,63 @@ TOOL_DEFINITIONS = [
                 "properties": {},
             },
         },
+    },
+    # 🔥🔥🔥 NEW ROUTINE MANAGEMENT TOOLS (COMMIT 6) 🔥🔥🔥
+    {
+        "type": "function",
+        "function": {
+            "name": "add_routine_entry",
+            "description": "Adds a new activity entry to the user's daily routine schedule. Requires start time (HH:MM), end time (HH:MM), and the activity description.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start": {
+                        "type": "string",
+                        "description": "The starting time of the activity in HH:MM format (e.g., 08:30)."
+                    },
+                    "end": {
+                        "type": "string",
+                        "description": "The ending time of the activity in HH:MM format (e.g., 10:00)."
+                    },
+                    "activity": {
+                        "type": "string",
+                        "description": "A description of the activity to be scheduled."
+                    }
+                },
+                "required": ["start", "end", "activity"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_routine_entry",
+            "description": "Removes one or more routine entries based on a keyword match in the activity description.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "activity_keyword": {
+                        "type": "string",
+                        "description": "A keyword or phrase found in the activity to be removed."
+                    }
+                },
+                "required": ["activity_keyword"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_routine",
+            "description": "Retrieves the full list of scheduled activities for the user's daily routine.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
     }
 ]
+
 # 🔥🔥🔥 END NEW SECTION 🔥🔥🔥
 
 # ========== Helper functions ==========
@@ -232,7 +287,7 @@ def ollama_response(prompt, tools=None, history=None):
         if response.status_code == 200:
             data = response.json()
             # Ollama returns the generated text in the 'response' key for api/chat
-            # 🔥🔥🔥 LINE 233: RETURN THE MESSAGE OBJECT (contains content OR tool_calls) 🔥🔥🔥
+            # 🔥🔥🔥  RETURN THE MESSAGE OBJECT (contains content OR tool_calls) 🔥🔥🔥
             return data.get("message", {"content":"Sorry, the LLM returned an empty response."})
         else:
             # Handle non-200 status codes (e.g., model not found)
@@ -285,6 +340,54 @@ def get_task_by_time(query_time=None):
         if in_range:
             return f"At {query_time}, you should: {slot['activity']}."
     return "No scheduled activity for this time."
+
+# 🔥🔥🔥 NEW FUNCTION: ADD ROUTINE ENTRY (COMMIT 6) 🔥🔥🔥
+def add_routine_entry(start, end, activity):
+    """Adds a new routine entry if start/end times are valid (HH:MM)."""
+    routine = load_json("routine.json", [])
+    try:
+        # Validate time format using the existing parse_time helper
+        parse_time(start)
+        parse_time(end)
+    except Exception:
+        return "Error: Invalid time format. Please ensure 'start' and 'end' are in HH:MM format (e.g., 09:00)."
+    
+    # Check if a similar entry already exists (optional but good practice)
+    for entry in routine:
+        if entry['start'] == start and entry['end'] == end:
+            return f"A routine entry already exists for {start} to {end}. Please try a different time slot."
+
+    new_entry = {
+        "start": start,
+        "end": end,
+        "activity": activity.strip()
+    }
+    routine.append(new_entry)
+    # Sort the routine by start time before saving
+    routine.sort(key=lambda x: parse_time(x['start']))
+    save_json("routine.json", routine)
+    
+    return f"Success! I have added '{activity}' from {start} to {end} to your routine."
+
+# 🔥🔥🔥 NEW FUNCTION: REMOVE ROUTINE ENTRY (COMMIT 6) 🔥🔥🔥
+def remove_routine_entry(activity_keyword):
+    """Removes a routine entry based on a partial match of the activity name."""
+    routine = load_json("routine.json", [])
+    initial_count = len(routine)
+    
+    # Filter out entries that contain the keyword (case-insensitive)
+    new_routine = [
+        entry for entry in routine 
+        if activity_keyword.lower() not in entry['activity'].lower()
+    ]
+    
+    if len(new_routine) < initial_count:
+        removed_count = initial_count - len(new_routine)
+        save_json("routine.json", new_routine)
+        return f"Successfully removed {removed_count} routine entry/entries containing the keyword '{activity_keyword}'."
+    else:
+        return f"No routine entry found matching the keyword '{activity_keyword}'. Your routine is unchanged."
+
 
 # ========== Other Assistant Features ==========
 
@@ -347,12 +450,15 @@ def main():
     WEATHER_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY"
     speak("Hello! I'm Ishu.")
 
-     # 🔥🔥🔥 LINE 352: ADD TOOL MAPPER FOR EXECUTION 🔥🔥🔥
+     # 🔥🔥🔥 ADD TOOL MAPPER FOR EXECUTION 🔥🔥🔥
     # Dictionary mapping tool names (as defined in TOOL_DEFINITIONS) to their Python function calls
     available_functions = {
         "tell_joke": tell_joke,
         "set_favorite_color": set_favorite_color,
         "get_favorite": get_favorite,
+        "add_routine_entry": add_routine_entry, # <<< New
+        "remove_routine_entry": remove_routine_entry, # <<< New
+        "get_routine": get_routine, # <<< New, so LLM can read the schedule
     }
 
     
@@ -380,12 +486,8 @@ def main():
         # ------------------------------
 
         # --- COMMAND HANDLING LOGIC ---
-
-        if "routine" in query:
-            speak(get_routine())
-        # 🔥🔥🔥 LINE 402: REMOVED OLD 'favorite color' HARDCODED LOGIC (Now handled by LLM Tool Call) 🔥🔥🔥
-
-        elif "what should i do in this time" in query or "what should i do now" in query:
+       
+        if "what should i do in this time" in query or "what should i do now" in query:
             speak(get_task_by_time())
         elif "what should i do at" in query:
             # "what should i do at 13:20"
@@ -395,17 +497,15 @@ def main():
                 speak(get_task_by_time(query_time))
             else:
                 speak("Please specify the time in HH:MM format.")
-        # 🔥🔥🔥 LINE 423: REMOVED OLD 'joke' HARDCODED LOGIC (Now handled by LLM Tool Call) 🔥🔥🔥
-
+       
         elif "story" in query:
             speak(tell_story())
         elif "weather" in query:
             city = ""
             # If in speech mode, prompt for city
             if mode == 'S':
-                # <<< FIX: ensure this prompt finishes before listening
                 speak("Which city?")
-                city = listen_whisper().lower() # *** USE WHISPER HERE TOO ***
+                city = listen_whisper().lower() 
             # If in written mode, try to extract city from the query
             elif mode == 'W':
                 # Simple extraction, e.g., "weather in london"
@@ -430,7 +530,7 @@ def main():
             speak("Goodbye! Have a great day!")
             break
 
-        # 🔥🔥🔥 LINE 458: NEW TOOL USE LOGIC AND LLM CATCH-ALL 🔥🔥🔥
+        # 🔥🔥🔥  NEW TOOL USE LOGIC AND LLM CATCH-ALL 🔥🔥🔥
         # *** NEW: Default Command to Ollama LLM (with Tool Use) ***
         else:
             history = []
