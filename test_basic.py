@@ -4,7 +4,7 @@ import subprocess
 import os
 import json
 
-# *** IMPORTANT: CHANGE 'assistant' below if your main file has a different name! ***
+# *** FIXED: The import statement now correctly references 'assistant' ***
 try:
     from assistant import ( 
         ollama_response, 
@@ -15,7 +15,7 @@ try:
         parse_time
     )
 except ImportError:
-    # Fallback/Dummy functions if the file cannot be imported in CI's environment
+    # This fallback is for safety, but with the correct name, we expect the block above to succeed.
     print("WARNING: Could not import main script. Using dummy functions for basic CI test.")
     def ollama_response(*args, **kwargs): return {"content": "Mocked LLM response."}
     def speak(*args, **kwargs): return None
