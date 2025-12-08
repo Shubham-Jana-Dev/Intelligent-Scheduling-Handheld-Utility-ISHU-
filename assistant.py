@@ -24,10 +24,57 @@ except Exception as e:
 
 # +++ 2. OLLAMA CONFIGURATION (NEW SECTION) +++
 # ============================================
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
+# 🔥🔥🔥 LINE 40: CHANGED API ENDPOINT TO /api/chat FOR TOOL USE 🔥🔥🔥
+OLLAMA_API_URL = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "phi3" # <<< Recommend using a fast, small model like 'llama3' or 'phi3'
+# 🔥🔥🔥 LINE 43: ADDED SYSTEM PROMPT FOR TOOL USE 🔥🔥🔥
+OLLAMA_SYSTEM_PROMPT = "You are Ishu, a helpful and friendly local AI assistant created by Shubham Jana. If a user's request matches one of your available tools, generate a JSON object to call the function. If not, answer the question directly. Always be concise and polite."
 # ============================================
-    
+
+# 🔥🔥🔥 NEW SECTION: OLLAMA TOOL DEFINITIONS 🔥🔥🔥
+TOOL_DEFINITIONS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "tell_joke",
+            "description": "Tells a random programming or general joke.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_favorite_color",
+            "description": "Sets the user's favorite color in the settings.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "color": {
+                        "type": "string",
+                        "description": "The name of the color to be set as the user's favorite.",
+                    }
+                },
+                "required": ["color"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_favorite",
+            "description": "Recalls the user's favorite color from the settings.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    }
+]
+# 🔥🔥🔥 END NEW SECTION 🔥🔥🔥
+
 # ========== Helper functions ==========
 
 # --- RASPBERRY PI NOTE START ---
@@ -153,16 +200,28 @@ def save_json(filename, obj):
     except Exception as e:
         print(f"Error saving JSON: {e}")
 
-# +++ NEW FUNCTION: OLLAMA RESPONSE +++
-def ollama_response(prompt):
+# +++ NEW FUNCTION: OLLAMA RESPONSE (MODIFIED FOR TOOL USE) +++
+# 🔥🔥🔥 LINE 201: MODIFIED FUNCTION SIGNATURE TO ACCEPT tools AND history 🔥🔥🔥
+def ollama_response(prompt, tools=None, history=None):
     """Sends a prompt to the local Ollama LLM and returns the response."""
     print(f"Ollama thinking...")
     
+    # 🔥🔥🔥 LINE 205: DEFINED MESSAGE STRUCTURE FOR CHAT API AND TOOL USE 🔥🔥🔥
     # 1. Define the API request payload
+    if history:
+        messages = history
+    else:
+        # Include system prompt and user message for the initial call
+        messages = [
+            {"role": "system", "content": OLLAMA_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ]
+        
     payload = {
         "model": OLLAMA_MODEL,
-        "prompt": prompt,
-        "stream": False # Get the full response in one go
+        "messages": messages, # Use messages instead of prompt
+        "stream": False, # Get the full response in one go
+        "tools": tools if tools else [] # Pass tools if provided
     }
     
     try:
@@ -172,19 +231,20 @@ def ollama_response(prompt):
         # 3. Check for successful response
         if response.status_code == 200:
             data = response.json()
-            # Ollama returns the generated text in the 'response' key
-            return data.get("response", "Sorry, the LLM returned an empty response.")
+            # Ollama returns the generated text in the 'response' key for api/chat
+            # 🔥🔥🔥 LINE 233: RETURN THE MESSAGE OBJECT (contains content OR tool_calls) 🔥🔥🔥
+            return data.get("message", {"content":"Sorry, the LLM returned an empty response."})
         else:
             # Handle non-200 status codes (e.g., model not found)
-            return f"Ollama API Error (Code {response.status_code}). Check your model name ({OLLAMA_MODEL})."
+            return {"content": f"Ollama API Error (Code {response.status_code}). Check your model name ({OLLAMA_MODEL})."}
 
     except requests.exceptions.ConnectionError:
         # Handle the case where the Ollama server is not running
-        return "I can't connect to the local LLM. Please make sure Ollama is running on http://localhost:11434 and the model ('llama3') is pulled."
+        return {"content": "I can't connect to the local LLM. Please make sure Ollama is running on http://localhost:11434 and the model ('llama3') is pulled."}
     except Exception as e:
         # Catch all other potential errors
         print(f"Unexpected Ollama error: {e}")
-        return "An unexpected error occurred while processing the LLM request."
+        return {"content": "An unexpected error occurred while processing the LLM request."}
 # +++++++++++++++++++++++++++++++++++++
 
 # ========== Routine Features with Robust Time Logic ==========
@@ -287,6 +347,15 @@ def main():
     WEATHER_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY"
     speak("Hello! I'm Ishu.")
 
+     # 🔥🔥🔥 LINE 352: ADD TOOL MAPPER FOR EXECUTION 🔥🔥🔥
+    # Dictionary mapping tool names (as defined in TOOL_DEFINITIONS) to their Python function calls
+    available_functions = {
+        "tell_joke": tell_joke,
+        "set_favorite_color": set_favorite_color,
+        "get_favorite": get_favorite,
+    }
+
+    
     while True:
         # --- NEW INPUT CHOICE LOGIC ---
         print("\nChoose input mode: (S)peech or (W)ritten")
@@ -314,18 +383,8 @@ def main():
 
         if "routine" in query:
             speak(get_routine())
-        elif "favorite color" in query or "favourite colour" in query:
-            # Try to set color
-            if "my favorite color is" in query or "my favourite colour is" in query:
-                color_phrase = query.split("is")[-1].strip()
-                speak(set_favorite_color(color_phrase))
-            elif "is" in query and len(query.split("is")[-1].strip().split()) == 1:
-                color = query.split("is")[-1].strip()
-                speak(set_favorite_color(color))
-            else:
-                speak(get_favorite())
+        # 🔥🔥🔥 LINE 402: REMOVED OLD 'favorite color' HARDCODED LOGIC (Now handled by LLM Tool Call) 🔥🔥🔥
 
-        
         elif "what should i do in this time" in query or "what should i do now" in query:
             speak(get_task_by_time())
         elif "what should i do at" in query:
@@ -336,8 +395,8 @@ def main():
                 speak(get_task_by_time(query_time))
             else:
                 speak("Please specify the time in HH:MM format.")
-        elif "joke" in query:
-            speak(tell_joke())
+        # 🔥🔥🔥 LINE 423: REMOVED OLD 'joke' HARDCODED LOGIC (Now handled by LLM Tool Call) 🔥🔥🔥
+
         elif "story" in query:
             speak(tell_story())
         elif "weather" in query:
@@ -371,11 +430,59 @@ def main():
             speak("Goodbye! Have a great day!")
             break
 
-        # *** NEW: Default Command to Ollama LLM ***
+        # 🔥🔥🔥 LINE 458: NEW TOOL USE LOGIC AND LLM CATCH-ALL 🔥🔥🔥
+        # *** NEW: Default Command to Ollama LLM (with Tool Use) ***
         else:
-            # 8. Ollama LLM Catch-all
-            response_text = ollama_response(query)
-            speak(response_text)
+            history = []
+            # Step 1: Send the query and the tool definitions to the LLM
+            response_message = ollama_response(query, tools=TOOL_DEFINITIONS)
+
+            # Record the user message and LLM's first response for the next turn
+            history.append({"role": "user", "content": query})
+            history.append(response_message)
+            
+            # 1. Check if the LLM requested a function call
+            if "tool_calls" in response_message:
+                
+                function_calls = response_message["tool_calls"]
+                
+                # Iterate through all requested function calls
+                for call in function_calls:
+                    function_name = call["function"]["name"]
+                    function_args = call["function"]["arguments"]
+                    
+                    if function_name in available_functions:
+                        function_to_call = available_functions[function_name]
+                        
+                        try:
+                            # 2. Execute the function with arguments
+                            function_response = function_to_call(**function_args)
+                            
+                            # 3. Send the function result back to the LLM
+                            history.append({
+                                "role": "tool",
+                                "content": function_response
+                            })
+                            
+                            # Get the final answer from the LLM based on the tool result
+                            final_response = ollama_response(query, tools=TOOL_DEFINITIONS, history=history)
+                            
+                            # Speak the final, informed response
+                            speak(final_response.get("content", "I processed your request but the LLM did not provide a final answer."))
+                            break # Exit the loop after getting the final response
+
+                        except TypeError as e:
+                            # Handle missing or incorrect arguments
+                            speak(f"Error executing tool '{function_name}'. Missing arguments? {e}")
+                        except Exception as e:
+                            speak(f"An error occurred during tool execution: {e}")
+                            
+            # 4. If no function was called, or if the initial LLM response had content (general answer)
+            elif "content" in response_message and response_message["content"]:
+                speak(response_message["content"])
+            else:
+                speak("I received an empty response from the LLM. Please check your Ollama configuration or model.")
+
 
 if __name__ == "__main__":
     # NOTE for Pi: Before running on a Raspberry Pi, ensure you have
