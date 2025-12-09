@@ -1,5 +1,3 @@
-SpeechRecognition
-pocketsphinx
 pyjokes
 requests
 openai-whisper  
