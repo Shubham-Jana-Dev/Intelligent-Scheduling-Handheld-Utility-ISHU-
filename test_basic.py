@@ -38,7 +38,7 @@ except ImportError as e:
 
 
 # =========================================================
-# 🐞🔫 FIX 1: Mocking Ollama API Calls (Bypasses Network)
+# FIX 1: Mocking Ollama API Calls (Bypasses Network)
 # =========================================================
 
 @mock.patch('requests.post')
@@ -61,7 +61,8 @@ def test_ollama_response_works(mock_post):
     assert "Mock LLM worked!" in response_message.get("content", "")
 
 # =========================================================
-# 🐞🔫 FIX 2: Correctly Mocking the Speak Function (Bypasses 'say' & OS check)
+# FIX 2: Correctly Mocking the Speak Function (Bypasses 'say' & OS check)
+# This section contains the fix for the CI failure.
 # =========================================================
 
 def test_speak_does_not_crash_ci(monkeypatch):
@@ -71,7 +72,7 @@ def test_speak_does_not_crash_ci(monkeypatch):
     """
     
     # Step 1: Define a class that mimics os.uname() but forces sysname to be 'Darwin'
-    # This is the crucial fix that ensures the code enters the "Mac TTS" path.
+    # THIS IS THE CRITICAL FIX: It ensures the code enters the Mac TTS path.
     class MockUname:
         sysname = "Darwin"
         machine = "x86_64" 
@@ -98,7 +99,7 @@ def test_speak_does_not_crash_ci(monkeypatch):
         mock_popen.assert_not_called()
 
 # =========================================================
-# 🐞🔫 FIX 3: Testing Routine Management Logic (Core Features)
+# FIX 3: Testing Routine Management Logic (Core Features)
 # =========================================================
 
 def test_routine_management_logic_basic(monkeypatch):
@@ -148,7 +149,7 @@ def test_routine_management_logic_basic(monkeypatch):
 
 
 # =========================================================
-# 🐞🔫 FINAL TEST: Simple assert to ensure pytest runs
+# FINAL TEST: Simple assert to ensure pytest runs
 # =========================================================
 
 def test_ci_final_runs():
