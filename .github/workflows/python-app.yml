@@ -18,14 +18,16 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # === MODIFICATION 1: Change python-dev to python3-dev for clarity/compatibility ===
-    # Includes all packages for PocketSphinx and build tools for Whisper/PyTorch.
-    - name: Install PocketSphinx System Dependencies
+    # === FIX: Install ALL required system dependencies for audio, speech recognition, and build tools ===
+    # Whisper/SpeechRecognition needs FFmpeg and these build libraries to succeed on Ubuntu.
+    - name: Install System Dependencies (Audio & Build Tools)
       run: |
         sudo apt-get update
         sudo apt-get install -y subversion libasound-dev \
                                  bison swig python3-dev \
-                                 libpulse-dev build-essential 
+                                 libpulse-dev build-essential \
+                                 # CRITICAL ADDITION: FFmpeg for Whisper and media handling
+                                 ffmpeg 
 
     - name: Set up Python 3.10
       uses: actions/setup-python@v5 
@@ -37,12 +39,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 pytest
 
-    # === MERGED STEP: Install All Project Requirements and Audio Backend Tools ===
+    # === Install All Project Requirements ===
+    # This step installs all Python packages from requirements.txt (including PyTorch/Whisper).
     - name: Install All Project Requirements
       run: |
-        # Install all project requirements (PocketSphinx, Whisper, PyTorch, etc.)
         pip install -r requirements.txt
-        # Install sounddevice and numpy for headless audio stability (Crucial for CI)
+        # Explicitly install sounddevice and numpy for reliable headless audio operation
         pip install sounddevice numpy
         
     - name: Lint with flake8
