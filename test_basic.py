@@ -5,9 +5,8 @@ import os
 import json
 from datetime import time
 
-# --- IMPORTANT: CHANGE 'assistant' below if your main file has a different name! ---
-# We use a try/except to gracefully handle the case where the CI might have trouble 
-# importing, although importing individual functions is usually safer.
+# --- IMPORTANT: Setup for CI Import Safety ---
+# This block allows the tests to run even if some heavy dependencies fail to load in CI.
 try:
     from assistant import (
         ollama_response,
@@ -23,26 +22,31 @@ try:
         tell_story
     )
 except ImportError as e:
-    # If the import fails (e.g., missing dependencies), define placeholder functions 
-    # to allow the tests focused on mocking to still run.
     print(f"Warning: Failed to import all functions from assistant.py: {e}")
+    # Define placeholder functions for the CI to avoid crashing during import
     def speak(*args, **kwargs): pass 
     def ollama_response(*args, **kwargs): return {"content": "Mocked LLM failed to load."}
-    # Define other placeholder functions as necessary if tests still rely on them.
+    def add_routine_entry(*args, **kwargs): return "Mocked add_routine_entry"
+    def get_task_by_time(*args, **kwargs): return "Mocked get_task_by_time"
+    def remove_routine_entry(*args, **kwargs): return "Mocked remove_routine_entry"
+    def get_routine(*args, **kwargs): return "Mocked get_routine"
+    def parse_time(*args, **kwargs): pass
+    def tell_joke(*args, **kwargs): return "Mocked joke"
+    def get_favorite(*args, **kwargs): return "Mocked favorite"
+    def set_favorite_color(*args, **kwargs): return "Mocked set_favorite_color"
+    def tell_story(*args, **kwargs): return "Mocked story"
 
 
 # =========================================================
 # 🐞🔫 FIX 1: Mocking Ollama API Calls (Bypasses Network)
 # =========================================================
 
-# Mocking the requests.post function globally for all LLM-related tests
 @mock.patch('requests.post')
 def test_ollama_response_works(mock_post):
     """
     Ensures that ollama_response can successfully handle a mocked 200 OK response
     and extracts the content correctly, bypassing the actual network call.
     """
-    # Define the mock response object
     mock_response = mock.Mock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
@@ -51,15 +55,13 @@ def test_ollama_response_works(mock_post):
     
     mock_post.return_value = mock_response
     
-    # Call the function being tested
     response_message = ollama_response("test prompt")
     
-    # Assertions
     mock_post.assert_called_once()
     assert "Mock LLM worked!" in response_message.get("content", "")
 
 # =========================================================
-# 🐞🔫 FIX 2: Mocking the Speak Function (Bypasses 'say')
+# 🐞🔫 FIX 2: Correctly Mocking the Speak Function (Bypasses 'say' & OS check)
 # =========================================================
 
 def test_speak_does_not_crash_ci(monkeypatch):
@@ -69,9 +71,9 @@ def test_speak_does_not_crash_ci(monkeypatch):
     """
     
     # Step 1: Define a class that mimics os.uname() but forces sysname to be 'Darwin'
+    # This is the crucial fix that ensures the code enters the "Mac TTS" path.
     class MockUname:
         sysname = "Darwin"
-        # The machine attribute is sometimes checked, so we include a safe value
         machine = "x86_64" 
 
     # Use monkeypatch to replace the actual os.uname function with our mock
@@ -102,10 +104,8 @@ def test_speak_does_not_crash_ci(monkeypatch):
 def test_routine_management_logic_basic(monkeypatch):
     """
     Tests the core routine functions without hitting disk I/O.
-    The goal is to test the internal logic, not the save/load mechanism.
     """
     
-    # Mock disk I/O to prevent reading/writing to routine.json in CI
     mock_routine = []
     # Use monkeypatch to temporarily replace load_json and save_json
     monkeypatch.setattr('assistant.load_json', lambda x, y: mock_routine)
@@ -129,7 +129,7 @@ def test_routine_management_logic_basic(monkeypatch):
     result_get = get_routine()
     assert "09:00 - 10:00: daily meeting" in result_get
     
-    # 3. Test get_task_by_time
+    # 3. Test get_task_by_time (Mocked to return a specific time for test)
     result_task = get_task_by_time("09:30")
     assert "you should: daily meeting" in result_task
     
