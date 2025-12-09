@@ -60,28 +60,26 @@ def test_ollama_response_works(mock_post):
     mock_post.assert_called_once()
     assert "Mock LLM worked!" in response_message.get("content", "")
 
+
 # =========================================================
-# FIX 2: Correctly Mocking the Speak Function (Bypasses 'say' & OS check)
-# This section contains the fix for the CI failure.
+# FIX 2: ULTIMATE DEFENSIVE MOCKING for Speak Function
 # =========================================================
 
-def test_speak_does_not_crash_ci(monkeypatch):
+def test_speak_does_not_crash_ci():
     """
-    Mocks os.uname() and subprocess calls to prevent CI crash on the Mac 'say' command.
-    Forces the code path to enter the subprocess block for correct mocking.
+    Uses unittest.mock.patch to replace os.uname() with a mock that returns 
+    'Darwin', forcing the code into the subprocess execution path for testing.
     """
     
-    # Step 1: Define a class that mimics os.uname() but forces sysname to be 'Darwin'
-    # THIS IS THE CRITICAL FIX: It ensures the code enters the Mac TTS path.
+    # 1. Define the mock object that returns 'Darwin'
     class MockUname:
         sysname = "Darwin"
         machine = "x86_64" 
 
-    # Use monkeypatch to replace the actual os.uname function with our mock
-    monkeypatch.setattr(os, 'uname', lambda: MockUname())
-    
-    # Step 2: Mock subprocess.Popen and subprocess.run to stop the execution
-    with mock.patch('subprocess.Popen') as mock_popen, \
+    # 2. Patch both os.uname and the subprocess functions simultaneously.
+    # We are patching the actual function as it exists in the 'os' module.
+    with mock.patch('os.uname', return_value=MockUname()), \
+         mock.patch('subprocess.Popen') as mock_popen, \
          mock.patch('subprocess.run') as mock_run:
 
         # Test non-blocking call
