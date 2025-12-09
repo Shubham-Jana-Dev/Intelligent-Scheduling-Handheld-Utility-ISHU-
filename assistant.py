@@ -16,16 +16,15 @@ import time as time_lib
 
 # Ensure the whisper model is loaded once at the start
 # NOTE: The 'base' model offers a good balance of accuracy and speed.
-try:
-    WHISPER_MODEL = whisper.load_model("base") 
-except Exception as e:
-    print(f"Error loading Whisper model: {e}")
-    WHISPER_MODEL = None
+# 🧊❄️🧊 CHANGE 1: Set WHISPER_MODEL to None globally to prevent import crash.
+WHISPER_MODEL = None
+# 🧊❄️🧊 OLD CODE REMOVED HERE (try/except block)
 
 # +++ 2. OLLAMA CONFIGURATION (NEW SECTION) +++
 # ============================================
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
-OLLAMA_MODEL = "phi3" # <<< Recommend using a fast, small model like 'llama3' or 'phi3'
+# 🧊❄️🧊 CHANGE 2: Switch to Llama3 for reliable tool calling. (Pull 'llama3' locally!)
+OLLAMA_MODEL = "llama3" 
 OLLAMA_SYSTEM_PROMPT = "You are Ishu, a helpful and friendly local AI assistant created by Shubham Jana. If a user's request matches one of your available tools, generate a JSON object to call the function. If not, answer the question directly. Always be concise and polite."
 # ============================================
 
@@ -209,6 +208,18 @@ def speak(text, blocking=False):
 
 def listen_whisper():
     """Records audio and uses Whisper for high-accuracy transcription."""
+     # 🧊❄️🧊 CHANGE 3: Implement lazy loading for WHISPER_MODEL
+    global WHISPER_MODEL 
+
+    if WHISPER_MODEL is None:
+        try:
+            print("Lazily loading Whisper model...")
+            WHISPER_MODEL = whisper.load_model("base") 
+        except Exception as e:
+            print(f"Error loading Whisper model: {e}")
+            WHISPER_MODEL = False # Mark as failed to prevent re-attempts and skip transcription
+            return "Whisper model failed to load during runtime."
+    
     r = sr.Recognizer()
     # Use a temporary file name
     temp_audio_file = "temp_audio.wav" 
@@ -297,7 +308,7 @@ def ollama_response(prompt, tools=None, history=None):
         # 3. Check for successful response
         if response.status_code == 200:
             data = response.json()
-        �
+
             return data.get("message", {"content":"Sorry, the LLM returned an empty response."})
         else:
             # Handle non-200 status codes (e.g., model not found)
@@ -551,7 +562,15 @@ def main():
             history = []
             # Step 1: Send the query and the tool definitions to the LLM
             response_message = ollama_response(query, tools=TOOL_DEFINITIONS)
-
+            
+            # 🧊❄️🧊 CHANGE 4: Add retry logic for unreliable tool-calling LLMs (like Phi3)
+            # Check if Ollama returned a 400 error (common with phi3/tools)
+            if "Code 400" in response_message.get("content", ""):
+                print("Ollama failed with Code 400, attempting to answer without tool definitions.")
+                # Try the query again, forcing a general content response (no tools)
+                response_message = ollama_response(query, tools=None) 
+            # 🧊❄️🧊 END CHANGE 4
+            
             # Record the user message and LLM's first response for the next turn
             history.append({"role": "user", "content": query})
             history.append(response_message)
