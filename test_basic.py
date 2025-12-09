@@ -76,8 +76,8 @@ def test_speak_does_not_crash_ci():
         sysname = "Darwin"
         machine = "x86_64" 
 
-    # 2. Patch both os.uname and the subprocess functions simultaneously.
-    # We are patching the actual function as it exists in the 'os' module.
+    # 2. Patch the built-in functions simultaneously.
+    # We are using the context manager for reliability.
     with mock.patch('os.uname', return_value=MockUname()), \
          mock.patch('subprocess.Popen') as mock_popen, \
          mock.patch('subprocess.run') as mock_run:
@@ -95,7 +95,7 @@ def test_speak_does_not_crash_ci():
         speak("Testing blocking speech", blocking=True)
         mock_run.assert_called_once()
         mock_popen.assert_not_called()
-
+             
 # =========================================================
 # FIX 3: Testing Routine Management Logic (Core Features)
 # =========================================================
