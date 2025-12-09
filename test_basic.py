@@ -60,15 +60,14 @@ def test_ollama_response_works(mock_post):
     mock_post.assert_called_once()
     assert "Mock LLM worked!" in response_message.get("content", "")
 
-
 # =========================================================
 # FIX 2: ULTIMATE DEFENSIVE MOCKING for Speak Function
 # =========================================================
 
 def test_speak_does_not_crash_ci():
     """
-    Uses unittest.mock.patch to replace os.uname() with a mock that returns 
-    'Darwin', forcing the code into the subprocess execution path for testing.
+    Uses unittest.mock.patch as a context manager to reliably replace os.uname(),
+    forcing the code into the Mac TTS path for successful subprocess mocking.
     """
     
     # 1. Define the mock object that returns 'Darwin'
@@ -76,8 +75,7 @@ def test_speak_does_not_crash_ci():
         sysname = "Darwin"
         machine = "x86_64" 
 
-    # 2. Patch the built-in functions simultaneously.
-    # We are using the context manager for reliability.
+    # 2. Patch the built-in functions simultaneously using the context manager for reliability.
     with mock.patch('os.uname', return_value=MockUname()), \
          mock.patch('subprocess.Popen') as mock_popen, \
          mock.patch('subprocess.run') as mock_run:
@@ -95,7 +93,7 @@ def test_speak_does_not_crash_ci():
         speak("Testing blocking speech", blocking=True)
         mock_run.assert_called_once()
         mock_popen.assert_not_called()
-             
+
 # =========================================================
 # FIX 3: Testing Routine Management Logic (Core Features)
 # =========================================================
