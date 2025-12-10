@@ -47,20 +47,24 @@ def test_ollama_response_works(mock_post):
 
 # =========================================================
 # 🗣️ Test 2: FIXING test_speak_does_not_crash_ci
-# CRITICAL CHANGE: Use monkeypatch to set IS_TESTING environment variable.
+# CRITICAL CHANGE: Explicitly mock os.uname() to force the 'Darwin' path.
 # =========================================================
 
-def test_speak_does_not_crash_ci(monkeypatch):
+def test_speak_does_not_crash_ci():
     """
-    Mocks subprocess calls and forces the 'say' command path in the speak function
-    by setting the IS_TESTING environment variable.
+    Forces the speak function into the Mac execution path by mocking os.uname()
+    to return 'Darwin', ensuring subprocess.Popen/run are called.
     """
     
-    # 1. CRITICAL: Force the speak function into the Mac/Testing path
-    monkeypatch.setenv("IS_TESTING", "True")
+    # 1. Define the mock object that returns 'Darwin'
+    class MockUname:
+        sysname = "Darwin"
+        machine = "x86_64" # Arbitrary value
 
-    # 2. Mock subprocess.Popen for non-blocking calls
-    with mock.patch('subprocess.Popen') as mock_popen, \
+    # 2. Patch the built-in functions simultaneously using the context manager.
+    # We patch os.uname to return our mock object.
+    with mock.patch('os.uname', return_value=MockUname()), \
+         mock.patch('subprocess.Popen') as mock_popen, \
          mock.patch('subprocess.run') as mock_run:
 
         # Test non-blocking call (should call Popen)
