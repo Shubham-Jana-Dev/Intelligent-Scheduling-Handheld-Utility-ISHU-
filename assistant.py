@@ -173,17 +173,14 @@ def speak(text, blocking=False):
     """
     Handles text-to-speech using the fast, local Mac 'say' command via subprocess.
     
-    CRITICAL FIX: Check for the IS_TESTING environment variable first.
-    If set, we assume Mac-like behavior for easy mocking, which ensures 
-    subprocess.Popen or subprocess.run are called in the test environment.
+    NOTE: Removed IS_TESTING check. The test now mocks os.uname() directly.
     """
     print(f"Ishu says: {text}")
     
-    # --- MAC/DARWIN TTS (Current Working Environment OR Testing Environment) ---
+    # --- MAC/DARWIN TTS ---
     is_mac = os.name == "posix" and os.uname().sysname == "Darwin"
-    is_testing = os.environ.get("IS_TESTING") == "True" # New check
 
-    if is_mac or is_testing:
+    if is_mac:
         try:
             command = ['say', text]
             if blocking:
@@ -194,9 +191,7 @@ def speak(text, blocking=False):
                 subprocess.Popen(command) 
         except FileNotFoundError:
             print("Warning: Mac 'say' command not found. Speech failed.")
-            # Fallback for CI/Linux if 'say' isn't available, but still called Pop/Run
-            if not is_testing:
-                print("TTS currently configured for macOS 'say' command. Speech unavailable.")
+            print("TTS currently configured for macOS 'say' command. Speech unavailable.")
 
     # --- RASPBERRY PI/LINUX TTS Placeholder ---
     elif os.uname().sysname == "Linux" and ("arm" in os.uname().machine or "aarch64" in os.uname().machine):
