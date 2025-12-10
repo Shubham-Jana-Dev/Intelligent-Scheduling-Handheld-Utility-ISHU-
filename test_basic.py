@@ -7,7 +7,7 @@ from datetime import time
 
 # --- CRITICAL FIX: Direct Import ---
 # IMPORT THE MODULE ITSELF for reference (e.g., assistant.pyjokes)
-import assistant 
+import assistant
 from assistant import (
     ollama_response,
     speak,
@@ -65,7 +65,6 @@ def test_speak_does_not_crash_ci():
         machine = "x86_64" # Arbitrary value
 
     # 2. Patch the built-in functions simultaneously using the context manager.
-    # FLAKE8 E501 FIX: Use parentheses to split the long 'with' statement.
     with (
         mock.patch('os.uname', return_value=MockUname()),
         mock.patch('subprocess.Popen') as mock_popen,
@@ -88,7 +87,8 @@ def test_speak_does_not_crash_ci():
 # -----------------------------------------------------------------------------
 
 # =========================================================
-# 📅 Test 3: Testing Routine Management Logic
+# 📅 Test 3: FIXING test_routine_management_logic_basic
+# CRITICAL FIX: Use an explicit data container to manage mutable state.
 # =========================================================
 
 def test_routine_management_logic_basic(monkeypatch):
@@ -97,27 +97,36 @@ def test_routine_management_logic_basic(monkeypatch):
     to mock file operations.
     """
     
-    mock_routine = []
+    # Use a dictionary to hold the routine list; this allows the inner list 
+    # to be reliably replaced/updated by mock_save_json.
+    routine_data_container = {"routine": []}
     
-    monkeypatch.setattr('assistant.load_json', lambda x, y: mock_routine)
+    # Mock load_json to return the current state of the routine
+    def mock_load_json(filename, default):
+        return routine_data_container["routine"]
     
+    # Mock save_json to replace the routine list in the container with the new object
     def mock_save_json(filename, obj):
-        mock_routine.clear()
-        mock_routine.extend(obj)
+        routine_data_container["routine"] = obj
 
+    monkeypatch.setattr('assistant.load_json', mock_load_json)
     monkeypatch.setattr('assistant.save_json', mock_save_json)
 
     # 1. Test add_routine_entry
     result_add = add_routine_entry("09:00", "10:00", "daily meeting")
     assert "Success!" in result_add
-    assert len(mock_routine) == 1
+    
+    # Check the length of the list INSIDE the container
+    assert len(routine_data_container["routine"]) == 1
     
     result_add_2 = add_routine_entry("11:30", "12:30", "lunch")
     assert "Success!" in result_add_2
-    assert len(mock_routine) == 2
+    
+    # Check the length of the list INSIDE the container
+    assert len(routine_data_container["routine"]) == 2
     
     # Check sorting: should be 09:00 then 11:30
-    assert mock_routine[0]['start'] == "09:00"
+    assert routine_data_container["routine"][0]['start'] == "09:00"
     
     # 2. Test get_routine
     result_get = get_routine()
@@ -130,7 +139,9 @@ def test_routine_management_logic_basic(monkeypatch):
     # 4. Test remove_routine_entry
     result_remove = remove_routine_entry("meeting")
     assert "Successfully removed 1 routine entry" in result_remove
-    assert len(mock_routine) == 1 # Only 'lunch' remains
+    
+    # Check the length of the list INSIDE the container
+    assert len(routine_data_container["routine"]) == 1 # Only 'lunch' remains
 
     # 5. Test edge case (invalid time format)
     result_invalid = add_routine_entry("9-00", "10:00", "error test")
