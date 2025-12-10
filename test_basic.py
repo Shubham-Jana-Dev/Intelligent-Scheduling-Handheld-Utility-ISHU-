@@ -5,47 +5,30 @@ import os
 import json
 from datetime import time
 
-# --- IMPORTANT: Setup for CI Import Safety ---
-# This block allows the tests to run even if some heavy dependencies fail to load in CI.
-try:
-    from assistant import (
-        ollama_response,
-        speak,
-        add_routine_entry,
-        get_task_by_time,
-        remove_routine_entry,
-        get_routine,
-        parse_time,
-        tell_joke,
-        get_favorite,
-        set_favorite_color,
-        tell_story
-    )
-except ImportError as e:
-    print(f"Warning: Failed to import all functions from assistant.py: {e}")
-    # Define placeholder functions for the CI to avoid crashing during import
-    def speak(*args, **kwargs): pass 
-    def ollama_response(*args, **kwargs): return {"content": "Mocked LLM failed to load."}
-    def add_routine_entry(*args, **kwargs): return "Mocked add_routine_entry"
-    def get_task_by_time(*args, **kwargs): return "Mocked get_task_by_time"
-    def remove_routine_entry(*args, **kwargs): return "Mocked remove_routine_entry"
-    def get_routine(*args, **kwargs): return "Mocked get_routine"
-    def parse_time(*args, **kwargs): pass
-    def tell_joke(*args, **kwargs): return "Mocked joke"
-    def get_favorite(*args, **kwargs): return "Mocked favorite"
-    def set_favorite_color(*args, **kwargs): return "Mocked set_favorite_color"
-    def tell_story(*args, **kwargs): return "Mocked story"
+# --- CRITICAL FIX: Direct Import ---
+from assistant import (
+    ollama_response,
+    speak,
+    add_routine_entry,
+    get_task_by_time,
+    remove_routine_entry,
+    get_routine,
+    parse_time,
+    tell_joke,
+    get_favorite,
+    set_favorite_color,
+    tell_story
+)
 
 
 # =========================================================
-# FIX 1: Mocking Ollama API Calls (Bypasses Network)
+# 🧪 Test 1: Mocking Ollama API Calls
 # =========================================================
 
 @mock.patch('requests.post')
 def test_ollama_response_works(mock_post):
     """
-    Ensures that ollama_response can successfully handle a mocked 200 OK response
-    and extracts the content correctly, bypassing the actual network call.
+    Ensures that ollama_response can successfully handle a mocked 200 OK response.
     """
     mock_response = mock.Mock()
     mock_response.status_code = 200
@@ -60,43 +43,43 @@ def test_ollama_response_works(mock_post):
     mock_post.assert_called_once()
     assert "Mock LLM worked!" in response_message.get("content", "")
 
+# -----------------------------------------------------------------------------
+
 # =========================================================
-# FIX 2: Skip Problematic Test to Stabilize CI
+# 🗣️ Test 2: FIXING test_speak_does_not_crash_ci
+# CRITICAL CHANGE: Use monkeypatch to set IS_TESTING environment variable.
 # =========================================================
 
-@pytest.mark.skip(reason="CI runner persistently fails to apply os.uname() mock; skipping to stabilize pipeline.")
-def test_speak_does_not_crash_ci():
+def test_speak_does_not_crash_ci(monkeypatch):
     """
-    Mocks os.uname() and subprocess calls to prevent CI crash on the Mac 'say' command.
-    This test is now skipped due to environmental conflicts on the CI runner.
+    Mocks subprocess calls and forces the 'say' command path in the speak function
+    by setting the IS_TESTING environment variable.
     """
     
-    # 1. Define the mock object that returns 'Darwin'
-    class MockUname:
-        sysname = "Darwin"
-        machine = "x86_64" 
+    # 1. CRITICAL: Force the speak function into the Mac/Testing path
+    monkeypatch.setenv("IS_TESTING", "True")
 
-    # 2. Patch the built-in functions simultaneously using the context manager for reliability.
-    with mock.patch('os.uname', return_value=MockUname()), \
-         mock.patch('subprocess.Popen') as mock_popen, \
+    # 2. Mock subprocess.Popen for non-blocking calls
+    with mock.patch('subprocess.Popen') as mock_popen, \
          mock.patch('subprocess.run') as mock_run:
 
-        # Test non-blocking call
+        # Test non-blocking call (should call Popen)
         speak("Testing non-blocking speech")
         mock_popen.assert_called_once()
         mock_run.assert_not_called()
         
         # Reset mocks for blocking call
         mock_popen.reset_mock()
-        mock_run.reset_mock()
         
-        # Test blocking call
+        # Test blocking call (should call run)
         speak("Testing blocking speech", blocking=True)
         mock_run.assert_called_once()
         mock_popen.assert_not_called()
 
+# -----------------------------------------------------------------------------
+
 # =========================================================
-# FIX 3: Testing Routine Management Logic (Core Features)
+# 📅 Test 3: Testing Routine Management Logic
 # =========================================================
 
 def test_routine_management_logic_basic(monkeypatch):
@@ -105,7 +88,7 @@ def test_routine_management_logic_basic(monkeypatch):
     """
     
     mock_routine = []
-    # Use monkeypatch to temporarily replace load_json and save_json
+    
     monkeypatch.setattr('assistant.load_json', lambda x, y: mock_routine)
     
     def mock_save_json(filename, obj):
@@ -144,9 +127,10 @@ def test_routine_management_logic_basic(monkeypatch):
     result_task_none = get_task_by_time("08:00")
     assert "No scheduled activity for this time." in result_task_none
 
+# -----------------------------------------------------------------------------
 
 # =========================================================
-# FINAL TEST: Simple assert to ensure pytest runs
+# ✅ Test 4: Final Sanity Check
 # =========================================================
 
 def test_ci_final_runs():
