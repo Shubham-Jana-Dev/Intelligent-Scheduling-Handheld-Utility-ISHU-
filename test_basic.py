@@ -49,13 +49,13 @@ def test_ollama_response_works(mock_post):
 # =========================================================
 # 🗣️ Test 2: FIXING test_speak_does_not_crash_ci
 # CRITICAL CHANGE: Explicitly mock os.uname() to force the 'Darwin' path.
+#                  Line-split 'with' statement for Flake8 E501 fix.
 # =========================================================
 
 def test_speak_does_not_crash_ci():
     """
     Forces the speak function into the Mac execution path by mocking os.uname()
-    to return 'Darwin', ensuring subprocess.Popen/run are called, which resolves
-    the CI failure.
+    to return 'Darwin', ensuring subprocess.Popen/run are called.
     """
     
     # 1. Define the mock object that returns 'Darwin'
@@ -64,10 +64,12 @@ def test_speak_does_not_crash_ci():
         machine = "x86_64" # Arbitrary value
 
     # 2. Patch the built-in functions simultaneously using the context manager.
-    # We patch os.uname to return our mock object.
-    with mock.patch('os.uname', return_value=MockUname()), \
-         mock.patch('subprocess.Popen') as mock_popen, \
-         mock.patch('subprocess.run') as mock_run:
+    # FLAKE8 E501 FIX: Use parentheses to split the long 'with' statement.
+    with (
+        mock.patch('os.uname', return_value=MockUname()),
+        mock.patch('subprocess.Popen') as mock_popen,
+        mock.patch('subprocess.run') as mock_run,
+    ):
 
         # Test non-blocking call (should call Popen)
         speak("Testing non-blocking speech")
