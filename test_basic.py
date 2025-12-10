@@ -6,7 +6,8 @@ import json
 from datetime import time
 
 # --- CRITICAL FIX: Direct Import ---
-# Ensure all necessary functions are directly imported from assistant.py
+# IMPORT THE MODULE ITSELF for reference (e.g., assistant.pyjokes)
+import assistant 
 from assistant import (
     ollama_response,
     speak,
@@ -152,7 +153,7 @@ def test_routine_management_logic_basic(monkeypatch):
 def test_simple_features(mock_save, mock_load):
     """Tests joke telling and favorite color features."""
     
-    # Mock pyjokes.get_joke()
+    # Now that 'assistant' is imported as a module, this reference is valid.
     if assistant.pyjokes is not None:
         assistant.pyjokes.get_joke.return_value = "Mock Joke!"
         assert tell_joke() == "Mock Joke!"
