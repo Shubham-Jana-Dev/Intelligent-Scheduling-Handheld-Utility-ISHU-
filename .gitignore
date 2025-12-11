@@ -31,4 +31,5 @@ Thumbs.db
 # Sensitive Configuration (API keys)
 # If you create a 'secrets.py' or 'config.py' to store the WEATHER_API_KEY, ignore it:
 # secrets.py
-# config.py
+temp_integration_test.py
+small_twin_features.py
