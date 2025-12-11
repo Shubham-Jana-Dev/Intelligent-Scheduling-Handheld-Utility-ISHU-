@@ -4,3 +4,4 @@ openai-whisper
 torch           
 torchaudio      
 numpy           
+speechrecognition
