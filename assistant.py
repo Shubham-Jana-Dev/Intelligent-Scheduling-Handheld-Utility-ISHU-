@@ -1,11 +1,11 @@
-import subprocess
+import subprocess 
 import os
 import requests
 import json
 from datetime import datetime, time
 import re
 import random
-import time as time_lib
+import time as time_lib 
 
 # =========================================================
 # 🐞🔫 CRITICAL FIX: Robust Safely Handled Imports
@@ -19,16 +19,20 @@ torchaudio = None
 numpy = None
 whisper = None
 
-# 🔥🔥🔥 COMMIT 1 CHANGE: Added new state variables for robustness 🔥🔥🔥
+#  Added new state variables for robustness 🔥🔥🔥
 SPEECH_RECOGNITION_AVAILABLE = False
 PYJOKES_AVAILABLE = False
 WHISPER_AVAILABLE = False
 # ======================================================================
 
+# 🔥🔥🔥 COMMIT 2 CHANGE: Global state for input mode 🔥🔥🔥
+CURRENT_MODE = 'S' # Start in Speech mode by default
+# ======================================================================
+
 # --- Speech Recognition Component ---
 try:
     import speech_recognition as sr
-    # 🔥🔥🔥 COMMIT 1 CHANGE: Update state variable in try block 🔥🔥🔥
+     #  Update state variable in try block 🔥🔥🔥
     SPEECH_RECOGNITION_AVAILABLE = True
 except ImportError:
     print("Warning: Failed to import SpeechRecognition. Legacy STT unavailable.")
@@ -36,7 +40,7 @@ except ImportError:
 # --- Pyjokes Component ---
 try:
     import pyjokes
-    # 🔥🔥🔥 COMMIT 1 CHANGE: Update state variable in try block 🔥🔥🔥
+    #  Update state variable in try block 🔥🔥🔥
     PYJOKES_AVAILABLE = True
 except ImportError:
     print("Warning: Failed to import pyjokes. Joke command unavailable.")
@@ -47,7 +51,7 @@ try:
     import torchaudio
     import numpy
     import whisper 
-    # 🔥🔥🔥 COMMIT 1 CHANGE: Update state variable in try block 🔥🔥🔥
+    #  Update state variable in try block 🔥🔥🔥
     WHISPER_AVAILABLE = True
 except ImportError:
     print("Warning: Failed to import Whisper components. Voice command functionality may be limited.")
@@ -65,8 +69,9 @@ OLLAMA_MODEL = "llama3"
 OLLAMA_SYSTEM_PROMPT = "You are Ishu, a helpful and friendly local AI assistant created by Shubham Jana. If a user's request matches one of your available tools, generate a JSON object to call the function. If not, answer the question directly. Always be concise and polite."
 # ============================================
 
-# 🔥🔥🔥 COMMIT 1 CHANGE: TEMPORARILY DISABLE TOOLS FOR STABILITY 🔥🔥🔥
-TOOL_DEFINITIONS = [] 
+#  TEMPORARILY DISABLE TOOLS FOR STABILITY 🔥🔥🔥
+TOOL_DEFINITIONS = []
+
 # 🔥🔥🔥 END OLLAMA TOOL DEFINITIONS 🔥🔥🔥
 
 # ========== Helper functions ==========
@@ -74,8 +79,6 @@ TOOL_DEFINITIONS = []
 def speak(text, blocking=False):
     """
     Handles text-to-speech using the fast, local Mac 'say' command via subprocess.
-    
-    NOTE: Removed IS_TESTING check. The test now mocks os.uname() directly.
     """
     print(f"Ishu says: {text}")
     
@@ -109,10 +112,9 @@ def listen_whisper():
     """Records audio and uses Whisper for high-accuracy transcription."""
     global WHISPER_MODEL 
 
-    # 🔥🔥🔥 COMMIT 1 CHANGE: Use new state variables for check 🔥🔥🔥
+    # 🔥🔥🔥  Use new state variables for check 🔥🔥🔥
     if not WHISPER_AVAILABLE or not SPEECH_RECOGNITION_AVAILABLE:
         return "Required speech modules (Whisper/SpeechRecognition) failed to load."
-    # ==============================================================
 
     if WHISPER_MODEL is None:
         try:
@@ -130,7 +132,7 @@ def listen_whisper():
         print("Whisper Listening...")
         r.adjust_for_ambient_noise(source)
         try:
-            # 🔥🔥🔥 COMMIT 1 CHANGE: Added timeout and phrase_time_limit for robustness 🔥🔥🔥
+            # 🔥🔥🔥  Added timeout and phrase_time_limit for robustness 🔥🔥🔥
             audio = r.listen(source, timeout=5, phrase_time_limit=15)
         except sr.WaitTimeoutError:
             print("No speech detected within the timeout period.")
@@ -146,7 +148,7 @@ def listen_whisper():
             print("Transcribing with Whisper...")
             result = WHISPER_MODEL.transcribe(temp_audio_file, fp16=False) 
             text = result["text"].strip()
-            print(f"User said: {text}") 
+            print(f"User said: {text}")
             return text
         else:
             print("Whisper model not loaded.")
@@ -166,6 +168,20 @@ def listen_written():
     print(f"User said: {result}")
     return result
 
+# +++ NEW FUNCTION: Handles initial mode selection +++
+def select_initial_mode():
+    """Prompts user to select the initial input mode."""
+    global CURRENT_MODE
+    while True:
+        print("\nChoose initial input mode: (S)peech or (W)ritten")
+        mode = input("Enter S or W: ").upper().strip()
+        if mode in ['S', 'W']:
+            CURRENT_MODE = mode
+            return mode
+        else:
+            print("Invalid input. Please enter S or W.")
+# +++++++++++++++++++++++++++++++++++++
+
 def load_json(filename, default):
     try:
         if os.path.exists(filename):
@@ -177,13 +193,13 @@ def load_json(filename, default):
 
 def save_json(filename, obj):
     try:
-        # 🔥🔥🔥 COMMIT 1 CHANGE: Added indent=4 for readable JSON files 🔥🔥🔥
+         #  Added indent=4 for readable JSON files 🔥🔥🔥
         with open(filename, "w") as f:
-            json.dump(obj, f, indent=4) 
+            json.dump(obj, f, indent=4)
     except Exception as e:
         print(f"Error saving JSON: {e}")
 
-# +++ NEW FUNCTION: OLLAMA RESPONSE (MODIFIED FOR TOOL USE & HISTORY) +++
+# +++ NEW FUNCTION: OLLAMA RESPONSE (MODIFIED FOR TOOL USE) +++
 def ollama_response(prompt, tools=None, history=None):
     """
     Sends a prompt to the local Ollama LLM and returns the response. 
@@ -191,7 +207,7 @@ def ollama_response(prompt, tools=None, history=None):
     """
     print(f"Ollama thinking...")
 
-    # 🔥🔥🔥 COMMIT 1 CHANGE: History handling logic 🔥🔥🔥
+    #  History handling logic 🔥🔥🔥
     if history and len(history) > 0:
         messages = history
     else:
@@ -200,19 +216,21 @@ def ollama_response(prompt, tools=None, history=None):
             {"role": "system", "content": OLLAMA_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ]
-        
+
     # Ensure the final message is the current user prompt if history was provided
+    # THIS BLOCK NEEDS TO BE INDENTED CONSISTENTLY (e.g., 4 spaces)
     if history and messages[-1]['role'] != 'user':
         messages.append({"role": "user", "content": prompt})
-        
+            
     payload = {
         "model": OLLAMA_MODEL,
-        "messages": messages, # Use messages array
-        "stream": False, 
-        "tools": tools if tools else [] 
+        "messages": messages, # Use messages instead of prompt
+        "stream": False, # Get the full response in one go
+        "tools": tools if tools else [] # Pass tools if provided
     }
+   
     # ===================================================
-    
+
     try:
         # 2. Send the request to the Ollama API
         response = requests.post(OLLAMA_API_URL, json=payload)
@@ -223,7 +241,7 @@ def ollama_response(prompt, tools=None, history=None):
 
             return data.get("message", {"content":"Sorry, the LLM returned an empty response."})
         else:
-            # 🔥🔥🔥 COMMIT 1 CHANGE: Added response text snippet for better error reporting 🔥🔥🔥
+            #  Added response text snippet for better error reporting 🔥🔥🔥
             return {"content": f"Ollama API Error (Code {response.status_code}). Check your model name ({OLLAMA_MODEL}). Response text: {response.text[:100]}..."}
     # ===========================================================================================
 
@@ -321,7 +339,7 @@ def remove_routine_entry(activity_keyword):
         return f"No routine entry found matching the keyword '{activity_keyword}'. Your routine is unchanged."
 
 
-# ========== Other Assistant Features (Kept in for potential re-integration) ==========
+# ========== Other Assistant Features ==========
 
 def get_favorite():
     favs = load_json("favorites.json", {})
@@ -337,17 +355,23 @@ def set_favorite_color(color):
     return f"Got it! I'll remember your favorite color is {color}."
 
 def tell_joke():
-    """Tells a joke using the local pyjokes library."""
-    if PYJOKES_AVAILABLE: 
+    """
+    Tells a joke using the local pyjokes library.
+    """
+    # CRITICAL CHECK: Ensure pyjokes was successfully imported
+    if pyjokes is not None: 
         try:
             return pyjokes.get_joke()
         except Exception as e:
             print(f"Error fetching joke from pyjokes: {e}")
     
+    # Fallback if pyjokes failed or was not imported
     return "Why do programmers prefer dark mode? Because light attracts bugs."
 
 def tell_story(topic=""):
-    """Generates a creative story using the Ollama LLM."""
+    """
+    Generates a creative story using the Ollama LLM.
+    """
     if topic:
         prompt = f"Tell me a short, imaginative story about {topic}. Make the story suitable for a student and end with a gentle lesson."
     else:
@@ -372,46 +396,48 @@ def get_weather(city, api_key):
     except Exception:
         return "Sorry, there was an error fetching the weather."
 
-# ========== Main Loop with Continuous Conversation ==========
+# ========== Main Loop with Smart Routine Feature ==========
 
 def main():
+    global CURRENT_MODE # Need to declare CURRENT_MODE as global to modify it.
+
     # NOTE: You must replace this with your actual OpenWeatherMap API key
     WEATHER_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY"
-    speak("Hello! I'm Ishu.")
     
-    # 🔥🔥🔥 COMMIT 1 CHANGE: Initialize chat history outside the loop 🔥🔥🔥
+    speak("Hello! I'm Ishu.")
+    # 🔥🔥🔥 COMMIT 2 CHANGE: Initial mode selection and greeting 🔥🔥🔥
+    select_initial_mode()
+    speak(f"Starting in {'Speech' if CURRENT_MODE == 'S' else 'Written'} mode. Say or type 'change mode' to switch.", blocking=True)
+    # ======================================================================
+
+    #  Initialize chat history outside the loop 🔥🔥🔥
     chat_history = [
         {"role": "system", "content": OLLAMA_SYSTEM_PROMPT},
     ]
-    # ======================================================================
-    
-    # Removed the TOOL_MAPPER as tools are disabled
+
     
     while True:
-        # --- NEW INPUT CHOICE LOGIC (Commit 2 will change this) ---
-        print("\nChoose input mode: (S)peech or (W)ritten")
-        mode = input("Enter S or W: ").upper().strip()
-
+        
+        # 🔥🔥🔥 COMMIT 2 CHANGE: STATEFUL INPUT LOGIC 🔥🔥🔥
         query = ""
-        if mode == 'S':
-            # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
-            speak("Ishu is waiting for you. Speaking mode active.", blocking=True)
-            # *** CALLING NEW WHISPER FUNCTION ***
+        if CURRENT_MODE == 'S':
+            speak("Listening...", blocking=True)
             query = listen_whisper().lower()
-            
             if not query:
-                # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
                 speak("Sorry, I didn't catch that. Can you repeat?", blocking=True)
                 continue
-        elif mode == 'W':
-            print("Ishu is waiting for you. Written mode active.")
+        else: # CURRENT_MODE == 'W'
             query = listen_written()
-        else:
-            print("Invalid input. Please enter S or W.")
-            continue
-        # ------------------------------
+        # ---------------------------------------------------
 
         # --- COMMAND HANDLING LOGIC ---
+        
+        # 🔥🔥🔥 COMMIT 2 CHANGE: New command to change mode 🔥🔥🔥
+        if "change mode" in query:
+            new_mode = 'W' if CURRENT_MODE == 'S' else 'S'
+            CURRENT_MODE = new_mode
+            speak(f"Mode switched to {'Speech' if CURRENT_MODE == 'S' else 'Written'}.", blocking=True)
+            continue
        
         if "what should i do in this time" in query or "what should i do now" in query:
             # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
@@ -420,21 +446,18 @@ def main():
             match = re.search(r'at (\d{1,2}:\d{2})', query)
             if match:
                 query_time = match.group(1)
-                # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
                 speak(get_task_by_time(query_time), blocking=True)
             else:
-                # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
                 speak("Please specify the time in HH:MM format.", blocking=True)
        
         elif "weather" in query:
             city = ""
             # If in speech mode, prompt for city
-            if mode == 'S':
-                # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
-                speak("Which city?", blocking=True) 
+            if CURRENT_MODE == 'S': # 🔥🔥🔥 COMMIT 2 CHANGE: Use global state
+                speak("Which city?", blocking=True)
                 city = listen_whisper().lower() 
             # If in written mode, try to extract city from the query
-            elif mode == 'W':
+            elif CURRENT_MODE == 'W': # 🔥🔥🔥 COMMIT 2 CHANGE: Use global state
                 # Simple extraction, e.g., "weather in london"
                 parts = query.split('weather in')
                 city = parts[1].strip() if len(parts) > 1 else 'unknown'
@@ -444,25 +467,25 @@ def main():
 
             # Check if city was captured before calling the API    
             if city and city != 'unknown':   
-                # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
+                #<<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
                 speak(get_weather(city, WEATHER_API_KEY), blocking=True)
             elif city == 'unknown':
-                # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
+                #<<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
                 speak("I need a city name to check the weather.", blocking=True)
                 
         elif "thank you" in query:
-            # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
-            speak("Mention not! Have a great day!", blocking=True) 
+            #<<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
+            speak("Mention not! Have a great day!", blocking=True)
             break
         elif "exit" in query or "quit" in query or "Goodbye" in query or "stop listening" in query:
-            # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
-            speak("Goodbye! Have a great day!", blocking=True) 
+            #<<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
+            speak("Goodbye! Have a great day!", blocking=True)
             break
 
         
-        # *** NEW: Default Command to Ollama LLM (Conversational Only) ***
+        # *** NEW: Default Command to Ollama LLM (with Tool Use) ***
         else:
-            # 🔥🔥🔥 COMMIT 1 CHANGE: History handling in main loop 🔥🔥🔥
+            #  History handling in main loop 🔥🔥🔥
             # Create a copy of the history and add the current user message for the API call
             current_messages = chat_history + [{"role": "user", "content": query}]
             
