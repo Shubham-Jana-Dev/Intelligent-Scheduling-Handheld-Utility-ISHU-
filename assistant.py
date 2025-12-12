@@ -214,7 +214,7 @@ def load_json(filename, default):
 
 def save_json(filename, obj):
     try:
-         # 🔥🔥🔥 COMMIT 1 CHANGE: Added indent=4 for readable JSON files 🔥🔥🔥
+         
         # Ensure directory exists before saving
         os.makedirs(os.path.dirname(filename) or '.', exist_ok=True)
         with open(filename, "w") as f:
