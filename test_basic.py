@@ -3,7 +3,7 @@ from unittest import mock
 import subprocess
 import os
 import json
-from datetime import time
+from datetime import time, datetime
 
 # --- CRITICAL FIX: Direct Import ---
 # IMPORT THE MODULE ITSELF for reference (e.g., assistant.pyjokes)
@@ -50,7 +50,6 @@ def test_ollama_response_works(mock_post):
 # =========================================================
 # 🗣️ Test 2: FIXING test_speak_does_not_crash_ci
 # CRITICAL CHANGE: Explicitly mock os.uname() to force the 'Darwin' path.
-#                  Line-split 'with' statement for Flake8 E501 fix.
 # =========================================================
 
 def test_speak_does_not_crash_ci():
@@ -88,7 +87,7 @@ def test_speak_does_not_crash_ci():
 
 # =========================================================
 # 📅 Test 3: FIXING test_routine_management_logic_basic
-# CRITICAL FIX: Use an explicit data container to manage mutable state.
+# Updated assertions to handle JSON string output from assistant functions.
 # =========================================================
 
 def test_routine_management_logic_basic(monkeypatch):
@@ -113,14 +112,22 @@ def test_routine_management_logic_basic(monkeypatch):
     monkeypatch.setattr('assistant.save_json', mock_save_json)
 
     # 1. Test add_routine_entry
-    result_add = add_routine_entry("09:00", "10:00", "daily meeting")
-    assert "Success!" in result_add
+    result_add_json = add_routine_entry("09:00", "10:00", "daily meeting")
+    
+    # 🔥🔥🔥 FIX: Parse JSON output and check 'status' and 'message' content
+    result_add = json.loads(result_add_json)
+    assert result_add["status"] == "success"
+    assert "daily meeting" in result_add["message"]
     
     # Check the length of the list INSIDE the container
     assert len(routine_data_container["routine"]) == 1
     
-    result_add_2 = add_routine_entry("11:30", "12:30", "lunch")
-    assert "Success!" in result_add_2
+    result_add_2_json = add_routine_entry("11:30", "12:30", "lunch")
+    
+    # 🔥🔥🔥 FIX: Parse JSON output
+    result_add_2 = json.loads(result_add_2_json)
+    assert result_add_2["status"] == "success"
+    assert "lunch" in result_add_2["message"]
     
     # Check the length of the list INSIDE the container
     assert len(routine_data_container["routine"]) == 2
@@ -128,28 +135,48 @@ def test_routine_management_logic_basic(monkeypatch):
     # Check sorting: should be 09:00 then 11:30
     assert routine_data_container["routine"][0]['start'] == "09:00"
     
-    # 2. Test get_routine
-    result_get = get_routine()
-    assert "09:00 - 10:00: daily meeting" in result_get
+    # 2. Test get_routine (returns full JSON string of the list)
+    result_get_json = get_routine()
+    result_get = json.loads(result_get_json)
+    # Check the number of entries and content of the first entry
+    assert len(result_get) == 2
+    assert result_get[0]['activity'] == "daily meeting"
     
     # 3. Test get_task_by_time (Mocked to return a specific time for test)
-    result_task = get_task_by_time("09:30")
-    assert "you should: daily meeting" in result_task
+    # Mock the current time to fall into the first entry (e.g., 09:30)
+    class MockDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2025, 12, 12, 9, 30, 0) # Mock time 09:30
+
+    monkeypatch.setattr('assistant.datetime', MockDatetime)
+    
+    result_task_json = get_task_by_time("09:30")
+    # 🔥🔥🔥 FIX: Parse JSON output and check 'status' and 'activity'
+    result_task = json.loads(result_task_json)
+    assert result_task["status"] == "found"
+    assert result_task["activity"] == "daily meeting"
     
     # 4. Test remove_routine_entry
-    result_remove = remove_routine_entry("meeting")
-    assert "Successfully removed 1 routine entry" in result_remove
+    result_remove_json = remove_routine_entry("meeting")
+    # 🔥🔥🔥 FIX: Parse JSON output and check 'status' and 'removed_count'
+    result_remove = json.loads(result_remove_json)
+    assert result_remove["status"] == "success"
+    assert result_remove["removed_count"] == 1
     
     # Check the length of the list INSIDE the container
     assert len(routine_data_container["routine"]) == 1 # Only 'lunch' remains
 
     # 5. Test edge case (invalid time format)
     result_invalid = add_routine_entry("9-00", "10:00", "error test")
-    assert "Error: Invalid time format" in result_invalid
+    # 🔥🔥🔥 FIX: The assistant code returns a simple error string if invalid format
+    assert "ERROR: Invalid time format" in result_invalid
     
     # 6. Test no activity found
-    result_task_none = get_task_by_time("08:00")
-    assert "No scheduled activity for this time." in result_task_none
+    result_task_none_json = get_task_by_time("08:00")
+    # 🔥🔥🔥 FIX: Parse JSON output and check 'status'
+    result_task_none = json.loads(result_task_none_json)
+    assert result_task_none["status"] == "not_found"
 
 # -----------------------------------------------------------------------------
 
