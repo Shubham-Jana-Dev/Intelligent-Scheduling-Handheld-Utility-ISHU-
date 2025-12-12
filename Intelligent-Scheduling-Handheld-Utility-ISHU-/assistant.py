@@ -26,7 +26,7 @@ WHISPER_AVAILABLE = False
 # ======================================================================
 
 # 🔥🔥🔥 COMMIT 2 CHANGE: Global state for input mode 🔥🔥🔥
-CURRENT_MODE = 'S' # Start in Speech mode by default
+CURRENT_MODE = 'W' # Start in Written mode for ease of testing
 # ======================================================================
 
 # --- Speech Recognition Component ---
@@ -88,8 +88,13 @@ answer the question directly and concisely as Ishu.
 """
 # ============================================
 
-# NOTE: The TOOL_DEFINITIONS are no longer needed for the API call, but we keep the logic 
-# and the names consistent with the new prompt.
+# --- File Paths (CRITICAL FIX: Use explicit relative path from the outer directory) ---
+# Assuming you run the script from the parent directory: 
+# /Users/shubhamjana/Desktop/Shubham-Jana-Dev-Intelligent-Scheduling-Handheld-Utility-ISHU-/
+NESTED_DIR = "Intelligent-Scheduling-Handheld-Utility-ISHU-"
+ROUTINE_FILE_PATH = os.path.join(NESTED_DIR, "routine.json")
+FAVORITES_FILE_PATH = os.path.join(NESTED_DIR, "favorites.json")
+
 
 # ========== Helper functions ==========
 
@@ -182,7 +187,6 @@ def listen_whisper():
 def listen_written():
     """Captures input from the keyboard."""
     result = input("Write your command: ").lower()
-    print(f"User said: {result}")
     return result
 
 # 🔥🔥🔥 COMMIT 2 CHANGE: Handles initial mode selection 🔥🔥🔥
@@ -211,6 +215,8 @@ def load_json(filename, default):
 def save_json(filename, obj):
     try:
          # 🔥🔥🔥 COMMIT 1 CHANGE: Added indent=4 for readable JSON files 🔥🔥🔥
+        # Ensure directory exists before saving
+        os.makedirs(os.path.dirname(filename) or '.', exist_ok=True)
         with open(filename, "w") as f:
             json.dump(obj, f, indent=4)
     except Exception as e:
@@ -220,30 +226,27 @@ def save_json(filename, obj):
 def ollama_response(prompt, history=None):
     """
     Sends a prompt to the local Ollama LLM and returns the response. 
-    NOTE: Tools parameter is removed to avoid API errors with llama3.
     """
     print(f"Ollama thinking...")
 
+    # Set up messages for the API call
     if history and len(history) > 0:
         messages = history
     else:
-        # Include system prompt and user message for the initial call
         messages = [
             {"role": "system", "content": OLLAMA_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ]
 
-    # Ensure the final message is the current user prompt if history was provided
-    if history and messages[-1]['role'] != 'user':
+    # If the last message in history is not the user's current prompt, append it
+    if not history or messages[-1].get('content') != prompt:
         messages.append({"role": "user", "content": prompt})
             
     payload = {
         "model": OLLAMA_MODEL,
-        # 🔥🔥🔥 COMMIT 4 FIX: Removed the 'tools' key entirely 🔥🔥🔥
         "messages": messages, 
         "stream": False, 
     }
-    # ===================================================
 
     try:
         # 2. Send the request to the Ollama API
@@ -255,7 +258,6 @@ def ollama_response(prompt, history=None):
             return data.get("message", {"content":"Sorry, the LLM returned an empty response."})
         else:
             return {"content": f"Ollama API Error (Code {response.status_code}). Check your model name ({OLLAMA_MODEL}). Response text: {response.text[:100]}..."}
-    # ===========================================================================================
 
     except requests.exceptions.ConnectionError:
         return {"content": "I can't connect to the local LLM. Please make sure Ollama is running on http://localhost:11434 and the model ('llama3') is pulled."}
@@ -271,20 +273,20 @@ def parse_time(timestr):
     h, m = [int(part) for part in timestr.strip().split(":")]
     return time(hour=h, minute=m)
 
-# NOTE: The LLM will now call these functions directly via the TOOL_MAPPER
 def get_routine():
-    routine = load_json("routine.json", [])
+    # 🔥🔥🔥 CRITICAL FIX: Use correct file path variable 🔥🔥🔥
+    routine = load_json(ROUTINE_FILE_PATH, [])
     if not routine:
         # LLM needs a concise string response
         return "You have not set your daily routine yet."
-    lines = [f"{entry['start']} - {entry['end']}: {entry['activity']}" for entry in routine]
-    # Return as structured JSON for the LLM to process and format
+    
     # Sort the routine by start time before returning
     routine.sort(key=lambda x: parse_time(x['start']))
     return json.dumps(routine)
 
 def get_task_by_time(query_time=None):
-    routine = load_json("routine.json", [])
+    # 🔥🔥🔥 CRITICAL FIX: Use correct file path variable 🔥🔥🔥
+    routine = load_json(ROUTINE_FILE_PATH, [])
     if not routine:
         return json.dumps({"status": "error", "message": "No daily routine is set."})
     
@@ -325,7 +327,8 @@ def get_task_by_time(query_time=None):
     for slot in routine:
         start_time = parse_time(slot['start'])
         # Check if the start time is later than the current time
-        if start_time > qt:
+        # NOTE: We use >= here so if query_time is 12:00, the 12:00 task is found
+        if start_time >= qt: 
             next_task = slot
             break
     
@@ -337,7 +340,8 @@ def get_task_by_time(query_time=None):
 
 def add_routine_entry(start, end, activity):
     """Adds a new routine entry if start/end times are valid (HH:MM)."""
-    routine = load_json("routine.json", [])
+    # 🔥🔥🔥 CRITICAL FIX: Use correct file path variable 🔥🔥🔥
+    routine = load_json(ROUTINE_FILE_PATH, [])
     try:
         # Validate time format using the existing parse_time helper
         parse_time(start)
@@ -353,13 +357,15 @@ def add_routine_entry(start, end, activity):
     routine.append(new_entry)
     # Sort the routine by start time before saving
     routine.sort(key=lambda x: parse_time(x['start']))
-    save_json("routine.json", routine)
+    # 🔥🔥🔥 CRITICAL FIX: Use correct file path variable 🔥🔥🔥
+    save_json(ROUTINE_FILE_PATH, routine)
     
     return json.dumps({"status": "success", "message": f"Added {activity} from {start} to {end}."})
 
 def remove_routine_entry(activity_keyword):
     """Removes a routine entry based on a partial match of the activity name."""
-    routine = load_json("routine.json", [])
+    # 🔥🔥🔥 CRITICAL FIX: Use correct file path variable 🔥🔥🔥
+    routine = load_json(ROUTINE_FILE_PATH, [])
     initial_count = len(routine)
     
     # Filter out entries that contain the keyword (case-insensitive)
@@ -370,7 +376,8 @@ def remove_routine_entry(activity_keyword):
     
     if len(new_routine) < initial_count:
         removed_count = initial_count - len(new_routine)
-        save_json("routine.json", new_routine)
+        # 🔥🔥🔥 CRITICAL FIX: Use correct file path variable 🔥🔥🔥
+        save_json(ROUTINE_FILE_PATH, new_routine)
         return json.dumps({"status": "success", "removed_count": removed_count, "keyword": activity_keyword})
     else:
         return json.dumps({"status": "not_found", "keyword": activity_keyword})
@@ -379,44 +386,38 @@ def remove_routine_entry(activity_keyword):
 # ========== Other Assistant Features (Included for functionality) ==========
 
 def get_favorite():
-    favs = load_json("favorites.json", {})
+    # 🔥🔥🔥 CRITICAL FIX: Use correct file path variable 🔥🔥🔥
+    favs = load_json(FAVORITES_FILE_PATH, {})
     if "color" in favs:
         return f"Your favorite color is {favs['color']}."
     else:
         return "It's a tricky question, you don't have any favorite color."
 
 def set_favorite_color(color):
-    favs = load_json("favorites.json", {})
+    # 🔥🔥🔥 CRITICAL FIX: Use correct file path variable 🔥🔥🔥
+    favs = load_json(FAVORITES_FILE_PATH, {})
     favs["color"] = color
-    save_json("favorites.json", favs)
+    # 🔥🔥🔥 CRITICAL FIX: Use correct file path variable 🔥🔥🔥
+    save_json(FAVORITES_FILE_PATH, favs)
     return f"Got it! I'll remember your favorite color is {color}."
 
 def tell_joke():
-    """
-    Tells a joke using the local pyjokes library.
-    """
-    # CRITICAL CHECK: Ensure pyjokes was successfully imported
+    """Tells a joke using the local pyjokes library."""
     if pyjokes is not None: 
         try:
             return pyjokes.get_joke()
         except Exception as e:
             print(f"Error fetching joke from pyjokes: {e}")
-    
-    # Fallback if pyjokes failed or was not imported
     return "Why do programmers prefer dark mode? Because light attracts bugs."
 
 def tell_story(topic=""):
-    """
-    Generates a creative story using the Ollama LLM.
-    """
+    """Generates a creative story using the Ollama LLM."""
     if topic:
         prompt = f"Tell me a short, imaginative story about {topic}. Make the story suitable for a student and end with a gentle lesson."
     else:
         prompt = "Tell me a short, imaginative story (about 100 words) focusing on the adventures of a young coder named Ishu. Make the story suitable for a student and end with a gentle lesson."
     
-    # We call ollama_response here; the system prompt handles content vs tool output.
     response_message = ollama_response(prompt) 
-
     return response_message.get("content", "I'm having trouble thinking of a good story right now.")
 
 def get_weather(city, api_key):
@@ -445,7 +446,7 @@ TOOL_MAPPER = {
 }
 # ===================================================================================
 
-# ========== Main Loop with Manual Tool Execution Logic ==========
+# ========== Main Loop with Manual Tool Execution Logic (NOW/NEXT FIX APPLIED) ==========
 
 def main():
     global CURRENT_MODE
@@ -454,12 +455,9 @@ def main():
     WEATHER_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY"
     
     speak("Hello! I'm Ishu.")
-    # 🔥🔥🔥 COMMIT 2 CHANGE: Initial mode selection and greeting 🔥🔥🔥
     select_initial_mode()
     speak(f"Starting in {'Speech' if CURRENT_MODE == 'S' else 'Written'} mode. Say or type 'change mode' to switch.", blocking=True)
-    # ======================================================================
 
-    # 🔥🔥🔥 COMMIT 1 CHANGE: Initialize chat history outside the loop 🔥🔥🔥
     chat_history = [
         {"role": "system", "content": OLLAMA_SYSTEM_PROMPT},
     ]
@@ -467,7 +465,6 @@ def main():
     
     while True:
         
-        # 🔥🔥🔥 COMMIT 2 CHANGE: STATEFUL INPUT LOGIC 🔥🔥🔥
         query = ""
         if CURRENT_MODE == 'S':
             speak("Listening...", blocking=True)
@@ -477,91 +474,115 @@ def main():
                 continue
         else: # CURRENT_MODE == 'W'
             query = listen_written()
-        # ---------------------------------------------------
-
-        # --- COMMAND HANDLING LOGIC (Retained for quick access features) ---
         
-        # 🔥🔥🔥 COMMIT 2 CHANGE: New command to change mode 🔥🔥🔥
+        print(f"User said: {query}")
+
+        # --- COMMAND HANDLING LOGIC ---
+        
         if "change mode" in query:
             new_mode = 'W' if CURRENT_MODE == 'S' else 'S'
             CURRENT_MODE = new_mode
             speak(f"Mode switched to {'Speech' if CURRENT_MODE == 'S' else 'Written'}.", blocking=True)
             continue
        
-        # Direct commands that we kept from before
-        elif "weather" in query:
-            city = ""
-            if CURRENT_MODE == 'S': 
-                speak("Which city?", blocking=True)
-                city = listen_whisper().lower() 
-            elif CURRENT_MODE == 'W':
-                parts = query.split('weather in')
-                city = parts[1].strip() if len(parts) > 1 else 'unknown'
-                if city == 'unknown':
-                    print("Please specify the city.")
-                    city = input("Which city?: ").lower()
-            if city and city != 'unknown':   
-                speak(get_weather(city, WEATHER_API_KEY), blocking=True)
-            elif city == 'unknown':
-                speak("I need a city name to check the weather.", blocking=True)
-                
         elif "thank you" in query:
             speak("Mention not! Have a great day!", blocking=True)
             break
-        elif "exit" in query or "quit" in query or "Goodbye" in query or "stop listening" in query:
+        elif "exit" in query or "quit" in query or "goodbye" in query or "stop listening" in query:
             speak("Goodbye! Have a great day!", blocking=True)
             break
 
-        # --- CRITICAL FIX: Local Query Interception ---
+        # --- CRITICAL FIX: Local Query Interception (NOW/NEXT Distinction) ---
         user_input_lower = query.lower()
         
-        # Define phrases that should trigger an instant, local routine check
-        time_query_phrases = [
+        # Define phrases for NOW (simple current task)
+        time_query_now = [
             "what should i do now", 
+            "what is my current task"
+        ]
+        
+        # Define phrases for NEXT (current task + next task)
+        time_query_next = [
             "what should i do next",
             "what's my next task",
             "what is my next task"
         ]
         
-        # Define phrases that should trigger the local full routine dump
         routine_query_phrases = ["what is my routine", "show my routine", "daily schedule"]
         
         is_local_tool_query = False
         tool_to_call = None
+        is_next_task_query = False # NEW FLAG to distinguish NOW vs NEXT
         
         if any(phrase in user_input_lower for phrase in routine_query_phrases):
             is_local_tool_query = True
             tool_to_call = "get_routine"
-        elif any(phrase in user_input_lower for phrase in time_query_phrases):
+        elif any(phrase in user_input_lower for phrase in time_query_next):
             is_local_tool_query = True
             tool_to_call = "get_task_by_time"
-        
+            is_next_task_query = True # This will trigger the dual-task response
+        elif any(phrase in user_input_lower for phrase in time_query_now):
+            is_local_tool_query = True
+            tool_to_call = "get_task_by_time"
+
         if is_local_tool_query:
             # Execute the function locally and bypass Ollama.
             print(f"Executing Local Tool: {tool_to_call}()")
             
             # --- Local Output Handling ---
             try:
+                output = ""
+                
+                # 1. Handle get_routine()
                 if tool_to_call == "get_routine":
                     response_json_string = get_routine()
                     
                     if response_json_string.startswith('['):
                         task_list = json.loads(response_json_string)
-                        output_list = [f"| {t['start']} - {t['end']} | {t['activity']} |" for t in task_list]
-                        
                         # Format for clear console output
-                        output = "## Your Full Daily Routine 🗓️\n" + "\n".join(output_list)
+                        header = "| Start | End | Activity |\n|---|---|---|"
+                        output_list = [f"| {t['start']} | {t['end']} | {t['activity']} |" for t in task_list]
+                        output = f"## Your Full Daily Routine 🗓️\n{header}\n" + "\n".join(output_list)
                     else:
-                        output = response_json_string # Use the string if it was an error message
+                        output = response_json_string 
                 
+                # 2. Handle get_task_by_time()
                 elif tool_to_call == "get_task_by_time":
+                    
+                    # First call to find the current/next task based on current time
                     response_json_string = get_task_by_time() 
                     task_data = json.loads(response_json_string)
+                    output = ""
                     
                     if task_data.get("status") == "found":
-                        output = f"Right now, you should be doing: **{task_data.get('activity')}** (Ends at {task_data.get('end')})."
+                        current_activity = task_data.get('activity')
+                        current_end_time = task_data.get('end')
+                        
+                        # --- LOGIC FOR "WHAT SHOULD I DO NEXT" ---
+                        if is_next_task_query:
+                            # Search for the next one using the current task's end time
+                            next_task_json_string = get_task_by_time(query_time=current_end_time) 
+                            next_task_data = json.loads(next_task_json_string)
+                            
+                            if next_task_data.get("status") == "next_found":
+                                next_activity = next_task_data.get('activity')
+                                next_start_time = next_task_data.get('start')
+                                
+                                output = (
+                                    f"Your current task is **{current_activity}** (Ends at {current_end_time}). "
+                                    f"Your *next* scheduled task is **{next_activity}** starting at {next_start_time}."
+                                )
+                            else:
+                                output = f"You are currently doing **{current_activity}** (Ends at {current_end_time}). There is no further scheduled task after this."
+                        
+                        # LOGIC for "WHAT SHOULD I DO NOW"
+                        else: 
+                            output = f"Right now, you should be doing: **{current_activity}** (Ends at {current_end_time})."
+                        
                     elif task_data.get("status") == "next_found":
+                        # If no task is found, but the next one is found (user is free)
                         output = f"You are currently free! Your next scheduled activity is **{task_data.get('activity')}** starting at {task_data.get('start')}."
+                    
                     else:
                         output = "No scheduled activity found for the current or upcoming time. Enjoy the free time!"
                 
@@ -573,13 +594,12 @@ def main():
                 
             except json.JSONDecodeError:
                 print(f"Error processing local tool output for {tool_to_call}. Falling through to Ollama.")
-                pass # Fall through to the Ollama call if local processing fails
+                pass 
             # --- End of Local Output Handling ---
             
         # --- End of Local Query Interception ---
         
         # *** NEW: Default Command to Ollama LLM (Manual Tool Execution) ***
-        # This path is taken ONLY if the query was not handled locally by the interception logic above.
         else:
             # 1. Start the conversation with the user's query
             current_messages = chat_history + [{"role": "user", "content": query}]
@@ -592,14 +612,12 @@ def main():
 
             # 🔥🔥🔥 COMMIT 4: Manual JSON Parsing for Tool Call 🔥🔥🔥
             try:
-                # Use regex to isolate the JSON block if it's wrapped, 
-                # but assume the LLM sticks to the strict prompt.
                 if response_content.strip().startswith('{') and response_content.strip().endswith('}'):
+                    # Use a simpler check for tool_call as regex is unreliable with nested JSON
                     parsed_json = json.loads(response_content)
                     if "tool_call" in parsed_json:
                         tool_call = parsed_json["tool_call"]
             except json.JSONDecodeError:
-                # Not a valid JSON, treat as standard content.
                 pass
             # -------------------------------------------------------------
             
@@ -615,6 +633,10 @@ def main():
                     print(f"Executing Tool: {func_name} with args: {func_args}")
                     
                     try:
+                        # Ensure we handle the case where the tool takes no arguments (e.g., get_routine)
+                        if func_args is None:
+                            func_args = {}
+                            
                         tool_output = TOOL_MAPPER[func_name](**func_args)
                     except Exception as e:
                         tool_output = f"ERROR executing {func_name}: {e}"
@@ -645,11 +667,7 @@ def main():
                 speak(response_message["content"], blocking=True) 
             else:
                 speak("I received an empty response from the LLM. Please check your Ollama configuration or model.", blocking=True) 
-            # ============================================================
 
 
 if __name__ == "__main__":
-    # NOTE: You may need to create a simple favorites.json file like {} 
-    # and a routine.json file with content (as provided previously) 
-    # in your project's root directory for the script to run cleanly.
     main()
