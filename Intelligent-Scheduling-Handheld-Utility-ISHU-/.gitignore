@@ -15,7 +15,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 # Your routine file:
-routine.json
+#routine.json
 # Your favorites file:
 favorites.json
 
