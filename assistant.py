@@ -19,7 +19,7 @@ torchaudio = None
 numpy = None
 whisper = None
 
-#  Added new state variables for robustness 🔥🔥🔥
+# 🔥🔥🔥 COMMIT 1 CHANGE: Added new state variables for robustness 🔥🔥🔥
 SPEECH_RECOGNITION_AVAILABLE = False
 PYJOKES_AVAILABLE = False
 WHISPER_AVAILABLE = False
@@ -32,7 +32,7 @@ CURRENT_MODE = 'S' # Start in Speech mode by default
 # --- Speech Recognition Component ---
 try:
     import speech_recognition as sr
-     #  Update state variable in try block 🔥🔥🔥
+     # 🔥🔥🔥 COMMIT 1 CHANGE: Update state variable in try block 🔥🔥🔥
     SPEECH_RECOGNITION_AVAILABLE = True
 except ImportError:
     print("Warning: Failed to import SpeechRecognition. Legacy STT unavailable.")
@@ -40,7 +40,7 @@ except ImportError:
 # --- Pyjokes Component ---
 try:
     import pyjokes
-    #  Update state variable in try block 🔥🔥🔥
+    # 🔥🔥🔥 COMMIT 1 CHANGE: Update state variable in try block 🔥🔥🔥
     PYJOKES_AVAILABLE = True
 except ImportError:
     print("Warning: Failed to import pyjokes. Joke command unavailable.")
@@ -51,7 +51,7 @@ try:
     import torchaudio
     import numpy
     import whisper 
-    #  Update state variable in try block 🔥🔥🔥
+    # 🔥🔥🔥 COMMIT 1 CHANGE: Update state variable in try block 🔥🔥🔥
     WHISPER_AVAILABLE = True
 except ImportError:
     print("Warning: Failed to import Whisper components. Voice command functionality may be limited.")
@@ -65,14 +65,31 @@ WHISPER_MODEL = None
 # +++ 2. OLLAMA CONFIGURATION +++
 # ============================================
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
+# 🔥🔥🔥 COMMIT 4 FIX: Switching back to llama3 and manual tool calling 🔥🔥🔥
 OLLAMA_MODEL = "llama3" 
-OLLAMA_SYSTEM_PROMPT = "You are Ishu, a helpful and friendly local AI assistant created by Shubham Jana. If a user's request matches one of your available tools, generate a JSON object to call the function. If not, answer the question directly. Always be concise and polite."
+
+# 🔥🔥🔥 COMMIT 4 FIX: New System Prompt for manual JSON output 🔥🔥🔥
+OLLAMA_SYSTEM_PROMPT = """
+You are Ishu, a helpful and friendly local AI assistant created by Shubham Jana.
+Your primary function is to manage the user's daily schedule/routine.
+
+When a user's request requires using a tool, you MUST respond ONLY with a JSON object 
+in the following format: {"tool_call": {"name": "function_name", "arguments": {"arg1": "value", "arg2": "value"}}}.
+Do NOT include any other text or markdown outside of the JSON block.
+
+The available tools and their required arguments are:
+- get_routine(): Retrieves the user's entire daily routine.
+- get_task_by_time(query_time: str [optional]): Finds the activity at a specific time (HH:MM).
+- add_routine_entry(start: str, end: str, activity: str): Adds a new entry.
+- remove_routine_entry(activity_keyword: str): Removes an entry matching a keyword.
+
+If the request is NOT a tool call (e.g., asking a general question, asking for a joke, or when provided with tool results), 
+answer the question directly and concisely as Ishu.
+"""
 # ============================================
 
-#  TEMPORARILY DISABLE TOOLS FOR STABILITY 🔥🔥🔥
-TOOL_DEFINITIONS = []
-
-# 🔥🔥🔥 END OLLAMA TOOL DEFINITIONS 🔥🔥🔥
+# NOTE: The TOOL_DEFINITIONS are no longer needed for the API call, but we keep the logic 
+# and the names consistent with the new prompt.
 
 # ========== Helper functions ==========
 
@@ -112,7 +129,7 @@ def listen_whisper():
     """Records audio and uses Whisper for high-accuracy transcription."""
     global WHISPER_MODEL 
 
-    # 🔥🔥🔥  Use new state variables for check 🔥🔥🔥
+    # 🔥🔥🔥 COMMIT 1 CHANGE: Use new state variables for check 🔥🔥🔥
     if not WHISPER_AVAILABLE or not SPEECH_RECOGNITION_AVAILABLE:
         return "Required speech modules (Whisper/SpeechRecognition) failed to load."
 
@@ -132,7 +149,7 @@ def listen_whisper():
         print("Whisper Listening...")
         r.adjust_for_ambient_noise(source)
         try:
-            # 🔥🔥🔥  Added timeout and phrase_time_limit for robustness 🔥🔥🔥
+            # 🔥🔥🔥 COMMIT 1 CHANGE: Added timeout and phrase_time_limit for robustness 🔥🔥🔥
             audio = r.listen(source, timeout=5, phrase_time_limit=15)
         except sr.WaitTimeoutError:
             print("No speech detected within the timeout period.")
@@ -168,7 +185,7 @@ def listen_written():
     print(f"User said: {result}")
     return result
 
-# +++ NEW FUNCTION: Handles initial mode selection +++
+# 🔥🔥🔥 COMMIT 2 CHANGE: Handles initial mode selection 🔥🔥🔥
 def select_initial_mode():
     """Prompts user to select the initial input mode."""
     global CURRENT_MODE
@@ -193,21 +210,20 @@ def load_json(filename, default):
 
 def save_json(filename, obj):
     try:
-         #  Added indent=4 for readable JSON files 🔥🔥🔥
+         # 🔥🔥🔥 COMMIT 1 CHANGE: Added indent=4 for readable JSON files 🔥🔥🔥
         with open(filename, "w") as f:
             json.dump(obj, f, indent=4)
     except Exception as e:
         print(f"Error saving JSON: {e}")
 
-# +++ NEW FUNCTION: OLLAMA RESPONSE (MODIFIED FOR TOOL USE) +++
-def ollama_response(prompt, tools=None, history=None):
+# +++ NEW FUNCTION: OLLAMA RESPONSE (MODIFIED FOR MANUAL TOOL USE) +++
+def ollama_response(prompt, history=None):
     """
     Sends a prompt to the local Ollama LLM and returns the response. 
-    Accepts conversation history for context.
+    NOTE: Tools parameter is removed to avoid API errors with llama3.
     """
     print(f"Ollama thinking...")
 
-    #  History handling logic 🔥🔥🔥
     if history and len(history) > 0:
         messages = history
     else:
@@ -218,17 +234,15 @@ def ollama_response(prompt, tools=None, history=None):
         ]
 
     # Ensure the final message is the current user prompt if history was provided
-    # THIS BLOCK NEEDS TO BE INDENTED CONSISTENTLY (e.g., 4 spaces)
     if history and messages[-1]['role'] != 'user':
         messages.append({"role": "user", "content": prompt})
             
     payload = {
         "model": OLLAMA_MODEL,
-        "messages": messages, # Use messages instead of prompt
-        "stream": False, # Get the full response in one go
-        "tools": tools if tools else [] # Pass tools if provided
+        # 🔥🔥🔥 COMMIT 4 FIX: Removed the 'tools' key entirely 🔥🔥🔥
+        "messages": messages, 
+        "stream": False, 
     }
-   
     # ===================================================
 
     try:
@@ -238,40 +252,39 @@ def ollama_response(prompt, tools=None, history=None):
         # 3. Check for successful response
         if response.status_code == 200:
             data = response.json()
-
             return data.get("message", {"content":"Sorry, the LLM returned an empty response."})
         else:
-            #  Added response text snippet for better error reporting 🔥🔥🔥
             return {"content": f"Ollama API Error (Code {response.status_code}). Check your model name ({OLLAMA_MODEL}). Response text: {response.text[:100]}..."}
     # ===========================================================================================
 
     except requests.exceptions.ConnectionError:
-        # Handle the case where the Ollama server is not running
         return {"content": "I can't connect to the local LLM. Please make sure Ollama is running on http://localhost:11434 and the model ('llama3') is pulled."}
     except Exception as e:
-        # Catch all other potential errors
         print(f"Unexpected Ollama error: {e}")
         return {"content": "An unexpected error occurred while processing the LLM request."}
 # +++++++++++++++++++++++++++++++++++++
 
-# ========== Routine Features with Robust Time Logic ==========
+# ========== Routine Features with Robust Time Logic (TOOL FUNCTIONS) ==========
 
 def parse_time(timestr):
     # Accept "05:30", "5:30", "07:31", etc.
     h, m = [int(part) for part in timestr.strip().split(":")]
     return time(hour=h, minute=m)
 
+# NOTE: The LLM will now call these functions directly via the TOOL_MAPPER
 def get_routine():
     routine = load_json("routine.json", [])
     if not routine:
+        # LLM needs a concise string response
         return "You have not set your daily routine yet."
     lines = [f"{entry['start']} - {entry['end']}: {entry['activity']}" for entry in routine]
-    return "Here's your detailed daily routine:\n" + "\n".join(lines)
+    # Return as structured JSON for the LLM to process and format
+    return json.dumps(routine)
 
 def get_task_by_time(query_time=None):
     routine = load_json("routine.json", [])
     if not routine:
-        return "You have not set your daily routine yet."
+        return "No daily routine is set."
     # Use current system time if not specified
     if query_time is None:
         now = datetime.now()
@@ -280,7 +293,7 @@ def get_task_by_time(query_time=None):
     try:
         qt = parse_time(query_time)
     except Exception:
-        return "Invalid time format. Please use HH:MM."
+        return "ERROR: Invalid time format. Please use HH:MM."
     for slot in routine:
         start = parse_time(slot['start'])
         end = parse_time(slot['end'])
@@ -290,8 +303,9 @@ def get_task_by_time(query_time=None):
         else:  # wraps over midnight
             in_range = qt >= start or qt < end
         if in_range:
-            return f"At {query_time}, you should: {slot['activity']}."
-    return "No scheduled activity for this time."
+            return json.dumps({"status": "found", "time": query_time, "activity": slot['activity']})
+            
+    return json.dumps({"status": "not_found", "time": query_time})
 
 def add_routine_entry(start, end, activity):
     """Adds a new routine entry if start/end times are valid (HH:MM)."""
@@ -301,13 +315,8 @@ def add_routine_entry(start, end, activity):
         parse_time(start)
         parse_time(end)
     except Exception:
-        return "Error: Invalid time format. Please ensure 'start' and 'end' are in HH:MM format (e.g., 09:00)."
+        return "ERROR: Invalid time format. Please ensure 'start' and 'end' are in HH:MM format (e.g., 09:00)."
     
-    # Check if a similar entry already exists (optional but good practice)
-    for entry in routine:
-        if entry['start'] == start and entry['end'] == end:
-            return f"A routine entry already exists for {start} to {end}. Please try a different time slot."
-
     new_entry = {
         "start": start,
         "end": end,
@@ -318,7 +327,7 @@ def add_routine_entry(start, end, activity):
     routine.sort(key=lambda x: parse_time(x['start']))
     save_json("routine.json", routine)
     
-    return f"Success! I have added '{activity}' from {start} to {end} to your routine."
+    return json.dumps({"status": "success", "message": f"Added {activity} from {start} to {end}."})
 
 def remove_routine_entry(activity_keyword):
     """Removes a routine entry based on a partial match of the activity name."""
@@ -334,12 +343,12 @@ def remove_routine_entry(activity_keyword):
     if len(new_routine) < initial_count:
         removed_count = initial_count - len(new_routine)
         save_json("routine.json", new_routine)
-        return f"Successfully removed {removed_count} routine entry/entries containing the keyword '{activity_keyword}'."
+        return json.dumps({"status": "success", "removed_count": removed_count, "keyword": activity_keyword})
     else:
-        return f"No routine entry found matching the keyword '{activity_keyword}'. Your routine is unchanged."
+        return json.dumps({"status": "not_found", "keyword": activity_keyword})
 
 
-# ========== Other Assistant Features ==========
+# ========== Other Assistant Features (Included for functionality) ==========
 
 def get_favorite():
     favs = load_json("favorites.json", {})
@@ -377,8 +386,8 @@ def tell_story(topic=""):
     else:
         prompt = "Tell me a short, imaginative story (about 100 words) focusing on the adventures of a young coder named Ishu. Make the story suitable for a student and end with a gentle lesson."
     
-    # We call ollama_response without tools here, as we only need the content.
-    response_message = ollama_response(prompt)
+    # We call ollama_response here; the system prompt handles content vs tool output.
+    response_message = ollama_response(prompt) 
 
     return response_message.get("content", "I'm having trouble thinking of a good story right now.")
 
@@ -396,10 +405,22 @@ def get_weather(city, api_key):
     except Exception:
         return "Sorry, there was an error fetching the weather."
 
-# ========== Main Loop with Smart Routine Feature ==========
+# ========== End of Other Assistant Features ==========
+
+
+# 🔥🔥🔥 COMMIT 3 CHANGE: MAPPER to link LLM function names to Python functions 🔥🔥🔥
+TOOL_MAPPER = {
+    "get_routine": get_routine,
+    "get_task_by_time": get_task_by_time,
+    "add_routine_entry": add_routine_entry,
+    "remove_routine_entry": remove_routine_entry,
+}
+# ===================================================================================
+
+# ========== Main Loop with Manual Tool Execution Logic ==========
 
 def main():
-    global CURRENT_MODE # Need to declare CURRENT_MODE as global to modify it.
+    global CURRENT_MODE
 
     # NOTE: You must replace this with your actual OpenWeatherMap API key
     WEATHER_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY"
@@ -410,7 +431,7 @@ def main():
     speak(f"Starting in {'Speech' if CURRENT_MODE == 'S' else 'Written'} mode. Say or type 'change mode' to switch.", blocking=True)
     # ======================================================================
 
-    #  Initialize chat history outside the loop 🔥🔥🔥
+    # 🔥🔥🔥 COMMIT 1 CHANGE: Initialize chat history outside the loop 🔥🔥🔥
     chat_history = [
         {"role": "system", "content": OLLAMA_SYSTEM_PROMPT},
     ]
@@ -430,7 +451,7 @@ def main():
             query = listen_written()
         # ---------------------------------------------------
 
-        # --- COMMAND HANDLING LOGIC ---
+        # --- COMMAND HANDLING LOGIC (Retained for quick access features) ---
         
         # 🔥🔥🔥 COMMIT 2 CHANGE: New command to change mode 🔥🔥🔥
         if "change mode" in query:
@@ -439,71 +460,96 @@ def main():
             speak(f"Mode switched to {'Speech' if CURRENT_MODE == 'S' else 'Written'}.", blocking=True)
             continue
        
-        if "what should i do in this time" in query or "what should i do now" in query:
-            # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
-            speak(get_task_by_time(), blocking=True)
-        elif "what should i do at" in query:
-            match = re.search(r'at (\d{1,2}:\d{2})', query)
-            if match:
-                query_time = match.group(1)
-                speak(get_task_by_time(query_time), blocking=True)
-            else:
-                speak("Please specify the time in HH:MM format.", blocking=True)
-       
+        # Direct commands that we kept from before
         elif "weather" in query:
             city = ""
-            # If in speech mode, prompt for city
-            if CURRENT_MODE == 'S': # 🔥🔥🔥 COMMIT 2 CHANGE: Use global state
+            if CURRENT_MODE == 'S': 
                 speak("Which city?", blocking=True)
                 city = listen_whisper().lower() 
-            # If in written mode, try to extract city from the query
-            elif CURRENT_MODE == 'W': # 🔥🔥🔥 COMMIT 2 CHANGE: Use global state
-                # Simple extraction, e.g., "weather in london"
+            elif CURRENT_MODE == 'W':
                 parts = query.split('weather in')
                 city = parts[1].strip() if len(parts) > 1 else 'unknown'
                 if city == 'unknown':
                     print("Please specify the city.")
                     city = input("Which city?: ").lower()
-
-            # Check if city was captured before calling the API    
             if city and city != 'unknown':   
-                #<<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
                 speak(get_weather(city, WEATHER_API_KEY), blocking=True)
             elif city == 'unknown':
-                #<<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
                 speak("I need a city name to check the weather.", blocking=True)
                 
         elif "thank you" in query:
-            #<<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
             speak("Mention not! Have a great day!", blocking=True)
             break
         elif "exit" in query or "quit" in query or "Goodbye" in query or "stop listening" in query:
-            #<<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
             speak("Goodbye! Have a great day!", blocking=True)
             break
 
         
-        # *** NEW: Default Command to Ollama LLM (with Tool Use) ***
+        # *** NEW: Default Command to Ollama LLM (Manual Tool Execution) ***
         else:
-            #  History handling in main loop 🔥🔥🔥
-            # Create a copy of the history and add the current user message for the API call
+            # 1. Start the conversation with the user's query
             current_messages = chat_history + [{"role": "user", "content": query}]
+            response_message = ollama_response(query, history=current_messages)
             
-            # Step 1: Send the query (and history) to the LLM with tools=None
-            response_message = ollama_response(query, tools=None, history=current_messages)
+            response_content = response_message.get("content", "")
             
-            # --- History Update ---
-            # 1. Add user message to history
-            chat_history.append({"role": "user", "content": query})
+            tool_call = None
+            tool_output = None
+
+            # 🔥🔥🔥 COMMIT 4: Manual JSON Parsing for Tool Call 🔥🔥🔥
+            try:
+                # Use regex to isolate the JSON block if it's wrapped, 
+                # but assume the LLM sticks to the strict prompt.
+                if response_content.strip().startswith('{') and response_content.strip().endswith('}'):
+                    parsed_json = json.loads(response_content)
+                    if "tool_call" in parsed_json:
+                        tool_call = parsed_json["tool_call"]
+            except json.JSONDecodeError:
+                # Not a valid JSON, treat as standard content.
+                pass
+            # -------------------------------------------------------------
             
-            # 2. Check if the LLM provided a response
-            if "content" in response_message and response_message["content"]:
-                # 3. Add LLM's response to history
+            if tool_call:
+                # Tool call detected
+                func_name = tool_call.get("name")
+                func_args = tool_call.get("arguments", {})
+                
+                # 2. Add the LLM's tool call request to history (formatted for clarity)
+                chat_history.append({"role": "assistant", "content": response_content})
+                
+                if func_name in TOOL_MAPPER:
+                    print(f"Executing Tool: {func_name} with args: {func_args}")
+                    
+                    try:
+                        tool_output = TOOL_MAPPER[func_name](**func_args)
+                    except Exception as e:
+                        tool_output = f"ERROR executing {func_name}: {e}"
+                    
+                    # 3. Add the Tool's output (as a function result) to history
+                    chat_history.append({
+                        "role": "tool",
+                        "content": tool_output,
+                    })
+                    
+                    # 4. Re-call the LLM with the tool output (RAG/Function Calling pattern)
+                    # NOTE: The query is the user's *original* query
+                    final_response_message = ollama_response(query, history=chat_history)
+                    
+                    # 5. Add final LLM response to history and speak
+                    chat_history.append(final_response_message)
+                    speak(final_response_message["content"], blocking=True)
+                else:
+                    speak(f"Error: Tool '{func_name}' requested by LLM is not implemented.", blocking=True)
+
+            # 5. Handle standard LLM conversation (No tool call returned)
+            elif response_content:
+                # Ensure user query is recorded if it wasn't a tool call path
+                if not chat_history or chat_history[-1]['role'] != 'user': 
+                    chat_history.append({"role": "user", "content": query})
+
                 chat_history.append(response_message)
-                # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
                 speak(response_message["content"], blocking=True) 
             else:
-                # <<< COMMIT 1 CHANGE: speak() is now blocking for better UX.
                 speak("I received an empty response from the LLM. Please check your Ollama configuration or model.", blocking=True) 
             # ============================================================
 
