@@ -1,0 +1,17 @@
+[
+    {
+        "start": "09:00",
+        "end": "10:00",
+        "activity": "Daily Coding Session"
+    },
+    {
+        "start": "12:30",
+        "end": "13:30",
+        "activity": "Lunch Break"
+    },
+    {
+        "start": "19:00",
+        "end": "20:00",
+        "activity": "Review Code and Plan Next Day"
+    }
+]

@@ -279,33 +279,61 @@ def get_routine():
         return "You have not set your daily routine yet."
     lines = [f"{entry['start']} - {entry['end']}: {entry['activity']}" for entry in routine]
     # Return as structured JSON for the LLM to process and format
+    # Sort the routine by start time before returning
+    routine.sort(key=lambda x: parse_time(x['start']))
     return json.dumps(routine)
 
 def get_task_by_time(query_time=None):
     routine = load_json("routine.json", [])
     if not routine:
-        return "No daily routine is set."
-    # Use current system time if not specified
+        return json.dumps({"status": "error", "message": "No daily routine is set."})
+    
+    # 1. Use current system time if not specified
     if query_time is None:
-        now = datetime.now()
-        query_time = now.strftime('%H:%M')
-    # Convert to datetime.time
-    try:
-        qt = parse_time(query_time)
-    except Exception:
-        return "ERROR: Invalid time format. Please use HH:MM."
+        now_dt = datetime.now()
+        query_time = now_dt.strftime('%H:%M')
+    else:
+        # Validate time format
+        try:
+            datetime.strptime(query_time, '%H:%M')
+            now_dt = datetime.combine(datetime.today().date(), parse_time(query_time))
+        except ValueError:
+            return json.dumps({"status": "error", "message": "Invalid time format. Please use HH:MM."})
+
+    qt = now_dt.time()
+    
+    # 2. Check for task in progress (current task)
     for slot in routine:
         start = parse_time(slot['start'])
         end = parse_time(slot['end'])
-        # If the slot wraps around midnight (e.g. 23:30–05:30)
+        
         if start < end:
             in_range = start <= qt < end
         else:  # wraps over midnight
             in_range = qt >= start or qt < end
-        if in_range:
-            return json.dumps({"status": "found", "time": query_time, "activity": slot['activity']})
             
-    return json.dumps({"status": "not_found", "time": query_time})
+        if in_range:
+            return json.dumps({"status": "found", "time": query_time, "start": slot['start'], "end": slot['end'], "activity": slot['activity']})
+            
+    # 3. Check for the next upcoming task
+    # Sort routine by start time
+    routine.sort(key=lambda x: parse_time(x['start']))
+    
+    next_task = None
+    
+    # Find the next task in the future (after the current time)
+    for slot in routine:
+        start_time = parse_time(slot['start'])
+        # Check if the start time is later than the current time
+        if start_time > qt:
+            next_task = slot
+            break
+    
+    if next_task:
+        return json.dumps({"status": "next_found", "time": query_time, "start": next_task['start'], "end": next_task['end'], "activity": next_task['activity']})
+        
+    return json.dumps({"status": "not_found", "time": query_time, "message": "No activity found for the current or upcoming time."})
+
 
 def add_routine_entry(start, end, activity):
     """Adds a new routine entry if start/end times are valid (HH:MM)."""
@@ -484,8 +512,74 @@ def main():
             speak("Goodbye! Have a great day!", blocking=True)
             break
 
+        # --- CRITICAL FIX: Local Query Interception ---
+        user_input_lower = query.lower()
+        
+        # Define phrases that should trigger an instant, local routine check
+        time_query_phrases = [
+            "what should i do now", 
+            "what should i do next",
+            "what's my next task",
+            "what is my next task"
+        ]
+        
+        # Define phrases that should trigger the local full routine dump
+        routine_query_phrases = ["what is my routine", "show my routine", "daily schedule"]
+        
+        is_local_tool_query = False
+        tool_to_call = None
+        
+        if any(phrase in user_input_lower for phrase in routine_query_phrases):
+            is_local_tool_query = True
+            tool_to_call = "get_routine"
+        elif any(phrase in user_input_lower for phrase in time_query_phrases):
+            is_local_tool_query = True
+            tool_to_call = "get_task_by_time"
+        
+        if is_local_tool_query:
+            # Execute the function locally and bypass Ollama.
+            print(f"Executing Local Tool: {tool_to_call}()")
+            
+            # --- Local Output Handling ---
+            try:
+                if tool_to_call == "get_routine":
+                    response_json_string = get_routine()
+                    
+                    if response_json_string.startswith('['):
+                        task_list = json.loads(response_json_string)
+                        output_list = [f"| {t['start']} - {t['end']} | {t['activity']} |" for t in task_list]
+                        
+                        # Format for clear console output
+                        output = "## Your Full Daily Routine 🗓️\n" + "\n".join(output_list)
+                    else:
+                        output = response_json_string # Use the string if it was an error message
+                
+                elif tool_to_call == "get_task_by_time":
+                    response_json_string = get_task_by_time() 
+                    task_data = json.loads(response_json_string)
+                    
+                    if task_data.get("status") == "found":
+                        output = f"Right now, you should be doing: **{task_data.get('activity')}** (Ends at {task_data.get('end')})."
+                    elif task_data.get("status") == "next_found":
+                        output = f"You are currently free! Your next scheduled activity is **{task_data.get('activity')}** starting at {task_data.get('start')}."
+                    else:
+                        output = "No scheduled activity found for the current or upcoming time. Enjoy the free time!"
+                
+                speak(output, blocking=False)
+                # Ensure the full, formatted output is printed to the console
+                print(f"Ishu says: {output}")
+                
+                continue # Skip the Ollama process entirely
+                
+            except json.JSONDecodeError:
+                print(f"Error processing local tool output for {tool_to_call}. Falling through to Ollama.")
+                pass # Fall through to the Ollama call if local processing fails
+            # --- End of Local Output Handling ---
+            
+        # --- End of Local Query Interception ---
         
         # *** NEW: Default Command to Ollama LLM (Manual Tool Execution) ***
+        # This path is taken ONLY if the query was not handled locally by the interception logic above.
         else:
             # 1. Start the conversation with the user's query
             current_messages = chat_history + [{"role": "user", "content": query}]
@@ -555,4 +649,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # NOTE: You may need to create a simple favorites.json file like {} 
+    # and a routine.json file with content (as provided previously) 
+    # in your project's root directory for the script to run cleanly.
     main()
