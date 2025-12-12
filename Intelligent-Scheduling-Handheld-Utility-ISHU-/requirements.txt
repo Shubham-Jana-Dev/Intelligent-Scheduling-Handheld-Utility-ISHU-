@@ -1,0 +1,7 @@
+pyjokes
+requests
+openai-whisper  
+torch           
+torchaudio      
+numpy           
+speechrecognition
