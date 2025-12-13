@@ -1,7 +1,8 @@
 pyjokes
 requests
-openai-whisper  
-torch           
-torchaudio      
-numpy           
+openai-whisper
+torch
+torchaudio
+numpy
 speechrecognition
+pytest-mock
