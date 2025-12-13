@@ -1,8 +1,9 @@
 import json
 import os
 import pytest
-import datetime # Import for time mocking
-from assistant import get_routine, get_task_by_time, ROUTINE_FILE_PATH # Import ROUTINE_FILE_PATH from assistant
+import datetime 
+# Import the function parse_time to use the real logic for comparison
+from assistant import get_routine, get_task_by_time, ROUTINE_FILE_PATH, parse_time 
 
 # --- Setup Fixtures (Mock Data) ---
 
@@ -10,11 +11,11 @@ from assistant import get_routine, get_task_by_time, ROUTINE_FILE_PATH # Import 
 def mock_routine_data():
     """Provides a sample routine structure for testing. Keys changed to 'activity'."""
     return [
-        {"start": "09:00", "end": "10:00", "activity": "Wake up and meditate"}, # Key changed from 'task' to 'activity'
-        {"start": "10:00", "end": "11:00", "activity": "Breakfast and check emails"}, # Key changed from 'task' to 'activity'
-        {"start": "11:00", "end": "12:30", "activity": "Morning walk or yoga"}, # Key changed from 'task' to 'activity'
-        {"start": "12:30", "end": "13:30", "activity": "Lunch break"}, # Key changed from 'task' to 'activity'
-        {"start": "13:30", "end": "15:30", "activity": "Work on personal project X"}, # Key changed from 'task' to 'activity'
+        {"start": "09:00", "end": "10:00", "activity": "Wake up and meditate"}, 
+        {"start": "10:00", "end": "11:00", "activity": "Breakfast and check emails"},
+        {"start": "11:00", "end": "12:30", "activity": "Morning walk or yoga"}, 
+        {"start": "12:30", "end": "13:30", "activity": "Lunch break"}, 
+        {"start": "13:30", "end": "15:30", "activity": "Work on personal project X"}, 
     ]
 
 @pytest.fixture(autouse=True)
@@ -59,12 +60,13 @@ def test_get_routine_success():
 
 def test_get_task_by_time_current_task(mocker):
     """Test finding a task currently in progress."""
-    # Mock datetime.datetime.now() to return a time inside the 10:00-11:00 slot (10:30)
-    mock_now = datetime.datetime.combine(datetime.date.today(), datetime.time(10, 30))
-    mocker.patch('assistant.datetime', autospec=True)
-    mocker.patch('assistant.datetime.now', return_value=mock_now)
-    mocker.patch('assistant.datetime.today', return_value=mock_now) # Ensure today() is also mocked if needed
+    # MOCK ONLY THE SPECIFIC FUNCTIONS THAT USE SYSTEM TIME
+    mock_now_dt = datetime.datetime.combine(datetime.date.today(), datetime.time(10, 30))
     
+    # Patch the functions, not the module (This avoids the MagicMock comparison issue)
+    mocker.patch('assistant.datetime.now', return_value=mock_now_dt)
+    mocker.patch('assistant.datetime.today', return_value=mock_now_dt.date())
+
     # get_task_by_time() with no argument uses the mocked current time (10:30)
     result = get_task_by_time() 
     result_data = json.loads(result)
@@ -73,36 +75,42 @@ def test_get_task_by_time_current_task(mocker):
     assert "Breakfast and check emails" in result_data["activity"]
 
 def test_get_task_by_time_next_task(mocker):
-    """Test finding the next task (your new feature)."""
-    # Mock current time to fall right before the next task (e.g., 10:59)
-    mock_now = datetime.datetime.combine(datetime.date.today(), datetime.time(10, 59))
-    mocker.patch('assistant.datetime', autospec=True)
-    mocker.patch('assistant.datetime.now', return_value=mock_now)
-    mocker.patch('assistant.datetime.today', return_value=mock_now)
-
-    # Call with a time that falls inside the current task
-    result_current = get_task_by_time()
-    result_data_current = json.loads(result_current)
+    """Test finding a task by explicit time, and a next task."""
     
-    # The next task is found by the logic in main() for 'what should I do next'.
-    # We test the core function which, when called without args, finds the *current* task.
-    # The next task test should check if the *next* task is found when explicitly checking the time gap.
-
-    # Test the function explicitly for a time *between* tasks (12:00)
-    result_next = get_task_by_time(query_time="10:00") # Calling at the start of a task should find the task
-    result_data_next = json.loads(result_next)
-    assert result_data_next["status"] == "found"
-    assert "Breakfast and check emails" in result_data_next["activity"]
+    # --- Test 1: Querying a time *inside* an activity ---
+    # This path is explicitly tested to ensure the provided query_time is used.
+    # No mocking is needed as we supply query_time
+    result_in_task = get_task_by_time(query_time="10:00") 
+    result_data_in_task = json.loads(result_in_task)
     
-    # Test explicitly checking the gap after 15:30 (Work on personal project X)
+    # The status should be 'found' because 10:00 is the start of the 'Breakfast' activity.
+    assert result_data_in_task["status"] == "found"
+    assert "Breakfast and check emails" in result_data_in_task["activity"]
+    
+    # --- Test 2: Querying a time *between* activities (to find the next one) ---
+    # 15:30 is the end of 'Work on personal project X'. Querying 15:35 should find the next one.
+    
+    # We must patch today().date() because assistant.py calls datetime.today().date()
+    # when query_time is provided.
+    mocker.patch('assistant.datetime.today', return_value=datetime.date.today()) 
+    
     result_gap = get_task_by_time(query_time="15:35")
     result_data_gap = json.loads(result_gap)
+    
+    # The next task after 15:30 is "Sleep" in the mock data provided above. Wait, no.
+    # The next routine item in mock_routine_data after 15:30 is:
+    # {"start": "22:00", "end": "07:00", "activity": "Sleep"} -- NO, this is from routine.json, not mock_routine_data
+    # In mock_routine_data: 
+    # {"start": "13:30", "end": "15:30", "activity": "Work on personal project X"},
+    # The list ENDS here. So it should wrap around to the earliest task (09:00).
+    
     assert result_data_gap["status"] == "next_found"
-    assert "Lunch break" in result_data_gap["activity"] # Error in the mock data logic: 15:35 should point to next routine after the mock data.
+    assert "Wake up and meditate" in result_data_gap["activity"] # Wraps to the first entry (09:00)
+
 
 def test_get_task_by_time_invalid_time():
     """Test handling of invalid time format."""
-    # get_task_by_time() takes 'query_time' as a string argument, not 'query'
+    # get_task_by_time() takes 'query_time' as a string argument
     result = get_task_by_time(query_time="4 PM") 
     assert '"status": "error"' in result
     assert "Invalid time format" in result
