@@ -90,10 +90,8 @@ answer the question directly and concisely as Ishu.
 
 # --- File Paths (CRITICAL FIX: Use explicit relative path from the outer directory) ---
 # Assuming you run the script from the parent directory: 
-# /Users/shubhamjana/Desktop/Shubham-Jana-Dev-Intelligent-Scheduling-Handheld-Utility-ISHU-/
-NESTED_DIR = "Intelligent-Scheduling-Handheld-Utility-ISHU-"
-ROUTINE_FILE_PATH = os.path.join(NESTED_DIR, "routine.json")
-FAVORITES_FILE_PATH = os.path.join(NESTED_DIR, "favorites.json")
+ROUTINE_FILE_PATH = os.path.join( "routine.json")
+FAVORITES_FILE_PATH = os.path.join( "favorites.json")
 
 
 # ========== Helper functions ==========
