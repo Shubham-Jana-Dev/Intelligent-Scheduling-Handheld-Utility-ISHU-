@@ -2,6 +2,7 @@ import json
 import os
 import pytest
 import datetime 
+# Import the function parse_time to use the real logic for comparison
 from assistant import get_routine, get_task_by_time, ROUTINE_FILE_PATH, parse_time 
 
 # --- Setup Fixtures (Mock Data) ---
@@ -60,21 +61,20 @@ def test_get_routine_success():
 def test_get_task_by_time_current_task(mocker):
     """Test finding a task currently in progress."""
     
+    mock_dt_class = mocker.MagicMock(spec=datetime.datetime)
     mock_now_dt = datetime.datetime.combine(datetime.date.today(), datetime.time(10, 30))
     
-    # 🔥🔥🔥 CRITICAL FIX: Patch the specific class methods in the assistant module 🔥🔥🔥
-    # We patch the datetime.datetime class methods, not the module's attributes.
-    mocker.patch('assistant.datetime.now', return_value=mock_now_dt)
-    
-    # NOTE: If assistant.py used `datetime.today()`, it would need a similar fix. 
-    # Since only .now() is typically used for current time, we focus on that. 
-    # We remove the full mock and go back to specific function mocks, now that we know the target is correct.
-    
-    # We also need to mock `datetime.today().date()` which is used in the `else` block of `get_task_by_time`.
-    # Let's mock the `today` method of the `datetime.date` class, as that is likely the root.
-    mocker.patch('assistant.datetime.date.today', return_value=mock_now_dt.date())
+    # 🌟 FIX: Configure the Mock Class 🌟
+    # When assistant.datetime.now() is called, return our fixed mock_now_dt object
+    mock_dt_class.now.return_value = mock_now_dt
+    # When assistant.datetime.today() is called, return our fixed mock_now_dt object (which has a .date() method)
+    mock_dt_class.today.return_value = mock_now_dt
+    # When assistant.datetime.combine(...) is called, use the real datetime.combine (or mock it to return a proper object)
+    mock_dt_class.combine = datetime.datetime.combine
 
-
+    # Patch the imported 'datetime' object (which is the datetime.datetime class) in assistant.py
+    mocker.patch('assistant.datetime', mock_dt_class)
+    
     # get_task_by_time() with no argument uses the mocked current time (10:30)
     result = get_task_by_time() 
     result_data = json.loads(result)
@@ -87,7 +87,7 @@ def test_get_task_by_time_next_task(mocker):
     """Test finding a task by explicit time, and a next task."""
     
     # --- Test 1: Querying a time *inside* an activity ---
-    # No mocking is needed here as no system time is used
+    # This path does not rely on datetime.now(), so no mock is needed for the time call itself
     result_in_task = get_task_by_time(query_time="10:00") 
     result_data_in_task = json.loads(result_in_task)
     
@@ -96,12 +96,15 @@ def test_get_task_by_time_next_task(mocker):
     
     # --- Test 2: Querying a time *between* activities (to find the next one) ---
     
-    mock_today_date = datetime.date(2025, 12, 13) # Arbitrary fixed date
+    # 🌟 FIX: Set up the mock environment for explicit query 🌟
+    mock_dt_class = mocker.MagicMock(spec=datetime.datetime)
+    mock_today_date = datetime.date(2025, 12, 13) # A fixed date object
     
-    # 🔥🔥🔥 CRITICAL FIX: Patch the correct class method for `datetime.today().date()` usage 🔥🔥🔥
-    # We need to mock the `.today()` method of the imported `datetime.date` class.
-    # Assuming `assistant.py` is structured like `import datetime`, we patch `assistant.datetime.date.today`
-    mocker.patch('assistant.datetime.date.today', return_value=mock_today_date)
+    # When the helper function calls datetime.today().date(), we must return a date object
+    mock_dt_class.today.return_value = mocker.MagicMock(date=lambda: mock_today_date)
+    mock_dt_class.combine = datetime.datetime.combine
+    
+    mocker.patch('assistant.datetime', mock_dt_class)
     
     result_gap = get_task_by_time(query_time="15:35")
     result_data_gap = json.loads(result_gap)
