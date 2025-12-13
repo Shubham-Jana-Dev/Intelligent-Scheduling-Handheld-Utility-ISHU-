@@ -335,6 +335,13 @@ def get_task_by_time(query_time=None):
     if next_task:
         return json.dumps({"status": "next_found", "time": query_time, "start": next_task['start'], "end": next_task['end'], "activity": next_task['activity']})
         
+    # 🔥🔥🔥 CRITICAL FIX: Add wrap-around logic to find the next task (first task of the day) 🔥🔥🔥
+    # If the loop finished and no task was found (because qt is past the last task)
+    # the next task is the first task of the day.
+    if routine:
+        wrap_around_task = routine[0]
+        return json.dumps({"status": "next_found", "time": query_time, "start": wrap_around_task['start'], "end": wrap_around_task['end'], "activity": wrap_around_task['activity']})
+    
     return json.dumps({"status": "not_found", "time": query_time, "message": "No activity found for the current or upcoming time."})
 
 
@@ -482,7 +489,7 @@ def main():
         if "change mode" in query:
             new_mode = 'W' if CURRENT_MODE == 'S' else 'S'
             CURRENT_MODE = new_mode
-            speak(f"Mode switched to {'Speech' if CURRENT_MODE == 'S' else 'Written'}.", blocking=True)
+            speak(f"Mode switched to {'Speech' if CURRENT_MODE == 'S' else 'Written'} mode.", blocking=True)
             continue
        
         elif "thank you" in query:
