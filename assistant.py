@@ -528,7 +528,7 @@ def main():
                             next_task_json_string = get_task_by_time(query_time=current_end_time) 
                             next_task_data = json.loads(next_task_json_string)
                             
-                            if next_task_data.get("status") == "next_found":
+                            if next_task_data.get("status") in ["found", "next_found"]:
                                 next_activity = next_task_data.get('activity')
                                 next_start_time = next_task_data.get('start')
                                 
