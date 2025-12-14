@@ -35,6 +35,11 @@
         "activity": "Project Collaboration and Review Meetings"
     },
     {
+        "start": "14:00",
+        "end": "14:30",
+        "activity": "review meeting"
+    },
+    {
         "start": "17:00",
         "end": "18:00",
         "activity": "Personal Learning (New Language or Skill)"

@@ -72,8 +72,8 @@ Do NOT include any other text or markdown outside of the JSON block.
 
 The available tools and their required arguments are:
 - get_routine(): Retrieves the user's entire daily routine.
-- get_task_by_time(query_time: str [optional]): Finds the activity at a specific time (HH:MM).
-- add_routine_entry(start: str, end: str, activity: str): Adds a new entry.
+- get_task_by_time(query_time: str [optional]): Finds the activity at a **single point in time (HH:MM)**, not a time range. This function is for "what are I doing AT 11:30" or "what is my next task."
+- add_routine_entry(start: str, end: str, activity: str): Adds a new entry. Both start and end must be strict HH:MM.
 - remove_routine_entry(activity_keyword: str): Removes an entry matching a keyword.
 
 If the request is NOT a tool call (e.g., asking a general question, asking for a joke, or when provided with tool results), 
@@ -579,73 +579,80 @@ def main():
         # *** Default Command to Ollama LLM (Manual Tool Execution) ***
         else:
             # 1. Start the conversation with the user's query
+            # CRITICAL: Always append the current query to history for the LLM's first pass
             current_messages = chat_history + [{"role": "user", "content": query}]
             response_message = ollama_response(query, history=current_messages)
             
             response_content = response_message.get("content", "")
             
-            tool_call = None
-            tool_output = None
-
-            # Manual JSON Parsing for Tool Call
-            try:
-                # Use regex to find a clean JSON block (LLM is chatty)
-                json_match = re.search(r'\{.*\}', response_content, re.DOTALL)
-                if json_match:
-                    parsed_json = json.loads(json_match.group(0))
-                    if "tool_call" in parsed_json:
-                        tool_call = parsed_json["tool_call"]
-            except json.JSONDecodeError:
-                pass
+            # 2. Add the LLM's initial response to history
+            chat_history.append(response_message)
             
-            if tool_call:
-                # Tool call detected
-                func_name = tool_call.get("name")
-                func_args = tool_call.get("arguments", {})
+            tool_calls = []
+            
+            # --- Robust Multi-Tool JSON Parsing ---
+            # Use regex to find all JSON blocks (handling chatty and batched responses)
+            json_matches = re.findall(r'(\s*\{.*?\}\s*)', response_content, re.DOTALL)
+            
+            for match in json_matches:
+                try:
+                    parsed_json = json.loads(match.strip())
+                    if "tool_call" in parsed_json:
+                        tool_calls.append(parsed_json["tool_call"])
+                except json.JSONDecodeError:
+                    # Ignore invalid JSON blocks
+                    pass
+
+            if tool_calls:
+                # --- Multi-Tool Execution Loop ---
+                executed_tools_summary = []
                 
-                # 2. Add the LLM's tool call request to history (formatted for clarity)
-                chat_history.append({"role": "assistant", "content": response_content})
+                for i, tool_call in enumerate(tool_calls):
+                    func_name = tool_call.get("name")
+                    func_args = tool_call.get("arguments", {})
+                    
+                    if func_name in TOOL_MAPPER:
+                        print(f"Executing Tool {i+1}/{len(tool_calls)}: {func_name} with args: {func_args}")
+                        
+                        try:
+                            if func_args is None:
+                                func_args = {}
+                                
+                            tool_output = TOOL_MAPPER[func_name](**func_args)
+                            executed_tools_summary.append(f"Tool {i+1} ({func_name}) Success: {tool_output[:50]}...")
+                        except Exception as e:
+                            tool_output = f"ERROR executing {func_name}: {e}"
+                            executed_tools_summary.append(f"Tool {i+1} ({func_name}) FAILED.")
+                        
+                        # Add the Tool's output (as a function result) to history
+                        # Re-add SYSTEM PROMPT here for maximum enforcement during the final call
+                        chat_history.append({"role": "system", "content": OLLAMA_SYSTEM_PROMPT})
+                        chat_history.append({
+                            "role": "tool",
+                            "content": tool_output,
+                        })
+                    else:
+                        executed_tools_summary.append(f"Tool {i+1} FAILED: Tool '{func_name}' is not implemented.")
+                        
+                # 3. Final Call to LLM for Conversational Summary
+                print(f"--- Execution Complete. Calling LLM for final answer. ---")
                 
-                if func_name in TOOL_MAPPER:
-                    print(f"Executing Tool: {func_name} with args: {func_args}")
-                    
-                    try:
-                        if func_args is None:
-                            func_args = {}
-                            
-                        tool_output = TOOL_MAPPER[func_name](**func_args)
-                    except Exception as e:
-                        tool_output = f"ERROR executing {func_name}: {e}"
-                    
-                    # 3. Add the Tool's output (as a function result) to history
-                    # CRITICAL FIX: Add SYSTEM PROMPT AGAIN to ensure LLM returns CLEAN response
-                    chat_history.append({"role": "system", "content": OLLAMA_SYSTEM_PROMPT})
-                    chat_history.append({
-                        "role": "tool",
-                        "content": tool_output,
-                    })
-                    
-                    # 4. Re-call the LLM with the tool output (RAG/Function Calling pattern)
-                    # Use the original user query for the final response generation context
-                    final_response_message = ollama_response("Based ONLY on the tool result in the last message, answer the user's original query in a friendly, conversational way.", history=chat_history)
-                    
-                    # 5. Add final LLM response to history and speak
-                    chat_history.append(final_response_message)
-                    speak(final_response_message["content"], blocking=True)
-                else:
-                    speak(f"Error: Tool '{func_name}' requested by LLM is not implemented.", blocking=True)
+                # Use a specific, strong prompt for the final answer
+                final_response_message = ollama_response(
+                    "Based ONLY on the tool results in the last messages, summarize the actions taken (added/removed tasks) and answer the user's original query in a friendly, conversational way.", 
+                    history=chat_history
+                )
+                
+                # 4. Add final LLM response to history and speak
+                chat_history.append(final_response_message)
+                speak(final_response_message["content"], blocking=True)
 
             # 5. Handle standard LLM conversation (No tool call returned)
             elif response_content:
-                # Ensure the user message is in history if it wasn't added at the start (due to an early LLM return)
-                if not chat_history or chat_history[-1].get('role') != 'user': 
-                    chat_history.append({"role": "user", "content": query})
-
-                chat_history.append(response_message)
+                # LLM spoke directly (joke, story, general question). Just speak the content.
                 speak(response_message["content"], blocking=True) 
             else:
-                speak("I received an empty response from the LLM. Please check your Ollama configuration or model.", blocking=True) 
-
+                speak("I received an empty response from the LLM. Please check your Ollama configuration or model.", blocking=True)
 
 if __name__ == "__main__":
     main()
