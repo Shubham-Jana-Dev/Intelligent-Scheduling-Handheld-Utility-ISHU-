@@ -210,6 +210,7 @@ def save_json(filename, obj):
 def ollama_response(prompt, history=None):
     """
     Sends a prompt to the local Ollama LLM and returns the response. 
+    (Fixed: ensures all returns have 'role' key to prevent crash)
     """
     print(f"Ollama thinking...")
 
@@ -235,19 +236,25 @@ def ollama_response(prompt, history=None):
         
         if response.status_code == 200:
             data = response.json()
-            return data.get("message", {"content":"Sorry, the LLM returned an empty response."})
+            # Ensure the fallback message includes the role
+            return data.get("message", {"role": "assistant", "content":"Sorry, the LLM returned an empty response."})
         else:
-            return {"content": f"Ollama API Error (Code {response.status_code}). Check your model name ({OLLAMA_MODEL}). Response text: {response.text[:100]}..."}
+            # Ensure all error returns include the role
+            return {"role": "assistant", "content": f"Ollama API Error (Code {response.status_code}). Check your model name ({OLLAMA_MODEL}). Response text: {response.text[:100]}..."}
 
     except requests.exceptions.ConnectionError:
-        return {"content": "I can't connect to the local LLM. Please make sure Ollama is running on http://localhost:11434 and the model ('llama3') is pulled."}
+        # Ensure connection error returns include the role
+        return {"role": "assistant", "content": "I can't connect to the local LLM. Please make sure Ollama is running on http://localhost:11434 and the model ('llama3') is pulled."}
     except Exception as e:
         print(f"Unexpected Ollama error: {e}")
-        return {"content": "An unexpected error occurred while processing the LLM request."}
+        # Ensure unexpected error returns include the role
+        return {"role": "assistant", "content": "An unexpected error occurred while processing the LLM request."}
 
 # ========== Routine Features with Robust Time Logic (TOOL FUNCTIONS) ==========
 
 def parse_time(timestr):
+    # Clean time string (e.g., remove 'PM' or 'AM' if LLM adds it)
+    timestr = re.sub(r'[^0-9:]', '', timestr).strip()
     h, m = [int(part) for part in timestr.strip().split(":")]
     return time(hour=h, minute=m)
 
@@ -271,8 +278,11 @@ def get_task_by_time(query_time=None):
     else:
         # Validate time format
         try:
-            datetime.strptime(query_time, '%H:%M')
-            now_dt = datetime.combine(datetime.today().date(), parse_time(query_time))
+            # Clean query time for validation (LLM sometimes adds extra characters)
+            clean_query_time = re.sub(r'[^0-9:]', '', query_time).strip()
+            datetime.strptime(clean_query_time, '%H:%M')
+            now_dt = datetime.combine(datetime.today().date(), parse_time(clean_query_time))
+            query_time = clean_query_time
         except ValueError:
             return json.dumps({"status": "error", "message": "Invalid time format. Please use HH:MM."})
 
@@ -317,22 +327,26 @@ def get_task_by_time(query_time=None):
 def add_routine_entry(start, end, activity):
     """Adds a new routine entry if start/end times are valid (HH:MM)."""
     routine = load_json(ROUTINE_FILE_PATH, [])
+    
     try:
-        parse_time(start)
-        parse_time(end)
+        # Clean inputs before parsing
+        clean_start = re.sub(r'[^0-9:]', '', start).strip()
+        clean_end = re.sub(r'[^0-9:]', '', end).strip()
+        parse_time(clean_start)
+        parse_time(clean_end)
     except Exception:
-        return "ERROR: Invalid time format. Please ensure 'start' and 'end' are in HH:MM format (e.g., 09:00)."
+        return f"ERROR: Invalid time format received. LLM requested start: '{start}', end: '{end}'. Please use strict HH:MM format."
     
     new_entry = {
-        "start": start,
-        "end": end,
+        "start": clean_start,
+        "end": clean_end,
         "activity": activity.strip()
     }
     routine.append(new_entry)
     routine.sort(key=lambda x: parse_time(x['start']))
     save_json(ROUTINE_FILE_PATH, routine)
     
-    return json.dumps({"status": "success", "message": f"Added {activity} from {start} to {end}."})
+    return json.dumps({"status": "success", "message": f"Added {activity} from {clean_start} to {clean_end}."})
 
 def remove_routine_entry(activity_keyword):
     """Removes a routine entry based on a partial match of the activity name."""
@@ -575,8 +589,10 @@ def main():
 
             # Manual JSON Parsing for Tool Call
             try:
-                if response_content.strip().startswith('{') and response_content.strip().endswith('}'):
-                    parsed_json = json.loads(response_content)
+                # Use regex to find a clean JSON block (LLM is chatty)
+                json_match = re.search(r'\{.*\}', response_content, re.DOTALL)
+                if json_match:
+                    parsed_json = json.loads(json_match.group(0))
                     if "tool_call" in parsed_json:
                         tool_call = parsed_json["tool_call"]
             except json.JSONDecodeError:
@@ -602,12 +618,15 @@ def main():
                         tool_output = f"ERROR executing {func_name}: {e}"
                     
                     # 3. Add the Tool's output (as a function result) to history
+                    # CRITICAL FIX: Add SYSTEM PROMPT AGAIN to ensure LLM returns CLEAN response
+                    chat_history.append({"role": "system", "content": OLLAMA_SYSTEM_PROMPT})
                     chat_history.append({
                         "role": "tool",
                         "content": tool_output,
                     })
                     
                     # 4. Re-call the LLM with the tool output (RAG/Function Calling pattern)
+                    # Use the original user query for the final response generation context
                     final_response_message = ollama_response(query, history=chat_history)
                     
                     # 5. Add final LLM response to history and speak
@@ -618,7 +637,8 @@ def main():
 
             # 5. Handle standard LLM conversation (No tool call returned)
             elif response_content:
-                if not chat_history or chat_history[-1]['role'] != 'user': 
+                # Ensure the user message is in history if it wasn't added at the start (due to an early LLM return)
+                if not chat_history or chat_history[-1].get('role') != 'user': 
                     chat_history.append({"role": "user", "content": query})
 
                 chat_history.append(response_message)
