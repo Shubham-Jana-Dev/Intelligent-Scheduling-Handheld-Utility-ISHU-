@@ -627,7 +627,7 @@ def main():
                     
                     # 4. Re-call the LLM with the tool output (RAG/Function Calling pattern)
                     # Use the original user query for the final response generation context
-                    final_response_message = ollama_response(query, history=chat_history)
+                    final_response_message = ollama_response("Based ONLY on the tool result in the last message, answer the user's original query in a friendly, conversational way.", history=chat_history)
                     
                     # 5. Add final LLM response to history and speak
                     chat_history.append(final_response_message)
