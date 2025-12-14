@@ -57,24 +57,26 @@ except ImportError:
 WHISPER_MODEL = None
 # ============================================
 
-# +++ 2. OLLAMA CONFIGURATION +++
+# +++ 2. OLLAMA CONFIGURATION (UPDATED) +++
 # ============================================
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
-OLLAMA_MODEL = "llama3" 
+# --- CRITICAL CHANGE: Switched from "llama3" to your custom model ---
+OLLAMA_MODEL = "ishu-companion" 
 
+# NOTE: The full prompt is now managed in the Modelfile, but we keep the structure here for history fallbacks.
 OLLAMA_SYSTEM_PROMPT = """
-You are Ishu, a helpful and friendly local AI assistant created by Shubham Jana.
-Your primary function is to manage the user's daily schedule/routine.
+You are Ishu, a helpful and friendly local AI assistant created by Shubham Jana, specializing in providing emotional support, telling jokes/stories, and helping with B.Tech studies.
+Your primary function is to manage the user's daily schedule/routine, which is stored in a JSON file.
 
 When a user's request requires using a tool, you MUST respond ONLY with a JSON object 
 in the following format: {"tool_call": {"name": "function_name", "arguments": {"arg1": "value", "arg2": "value"}}}.
-Do NOT include any other text or markdown outside of the JSON block.
+Do NOT include any other text, markdown, or conversational phrases when making a tool call.
 
 The available tools and their required arguments are:
-- get_routine(): Retrieves the user's entire daily routine.
+- get_routine(): Retrieves the user's entire daily routine from the file.
 - get_task_by_time(query_time: str [optional]): Finds the activity at a **single point in time (HH:MM)**, not a time range. This function is for "what are I doing AT 11:30" or "what is my next task."
-- add_routine_entry(start: str, end: str, activity: str): Adds a new entry. Both start and end must be strict HH:MM.
-- remove_routine_entry(activity_keyword: str): Removes an entry matching a keyword.
+- add_routine_entry(start: str, end: str, activity: str): Adds a new entry to the routine file. Both start and end must be strict HH:MM.
+- remove_routine_entry(activity_keyword: str): Removes an entry matching a keyword from the routine file.
 
 If the request is NOT a tool call (e.g., asking a general question, asking for a joke, or when provided with tool results), 
 answer the question directly and concisely as Ishu.
@@ -244,7 +246,7 @@ def ollama_response(prompt, history=None):
 
     except requests.exceptions.ConnectionError:
         # Ensure connection error returns include the role
-        return {"role": "assistant", "content": "I can't connect to the local LLM. Please make sure Ollama is running on http://localhost:11434 and the model ('llama3') is pulled."}
+        return {"role": "assistant", "content": f"I can't connect to the local LLM. Please make sure Ollama is running on http://localhost:11434 and the model ('{OLLAMA_MODEL}') is created."}
     except Exception as e:
         print(f"Unexpected Ollama error: {e}")
         # Ensure unexpected error returns include the role
@@ -625,7 +627,7 @@ def main():
                             executed_tools_summary.append(f"Tool {i+1} ({func_name}) FAILED.")
                         
                         # Add the Tool's output (as a function result) to history
-                        # Re-add SYSTEM PROMPT here for maximum enforcement during the final call
+                        # We temporarily add the SYSTEM prompt here to reinforce tool use discipline
                         chat_history.append({"role": "system", "content": OLLAMA_SYSTEM_PROMPT})
                         chat_history.append({
                             "role": "tool",
@@ -637,14 +639,19 @@ def main():
                 # 3. Final Call to LLM for Conversational Summary
                 print(f"--- Execution Complete. Calling LLM for final answer. ---")
                 
+                # --- CRITICAL FIX: Clean the history before the final call ---
+                # Remove the strict SYSTEM prompt to allow conversational mode
+                history_for_final_call = [msg for msg in chat_history if msg['role'] != 'system'] 
+
                 # Use a specific, strong prompt for the final answer
                 final_response_message = ollama_response(
                     "Based ONLY on the tool results in the last messages, summarize the actions taken (added/removed tasks) and answer the user's original query in a friendly, conversational way.", 
-                    history=chat_history
+                    history=history_for_final_call # Use the cleaned history!
                 )
                 
                 # 4. Add final LLM response to history and speak
                 chat_history.append(final_response_message)
+                # We ONLY speak the final, cleaned-up response from the LLM.
                 speak(final_response_message["content"], blocking=True)
 
             # 5. Handle standard LLM conversation (No tool call returned)
