@@ -2,7 +2,8 @@ import json
 import os
 import pytest
 import datetime 
-from assistant import get_routine, get_task_by_time, ROUTINE_FILE_PATH, parse_time 
+# Import the function parse_time to use the real logic for comparison
+from assistant import get_routine, get_task_by_time, add_routine_entry, remove_routine_entry, parse_time 
 
 # --- Setup Fixtures (Mock Data) ---
 
@@ -85,7 +86,7 @@ def test_get_task_by_time_next_task(mocker):
     assert result_data_in_task["status"] == "found"
     assert "Breakfast and check emails" in result_data_in_task["activity"]
     
-    # --- Test 2: Querying a time *between* activities (to find the next one) ---
+    # --- Test 2: Querying a time *after* the last entry (wrap around) ---
     
     # Setup mock environment for explicit query (required for the datetime.combine path)
     mock_dt_class = mocker.MagicMock(spec=datetime.datetime)
@@ -110,3 +111,85 @@ def test_get_task_by_time_invalid_time():
     result = get_task_by_time(query_time="4 PM") 
     assert '"status": "error"' in result
     assert "Invalid time format" in result
+
+# --- New Routine Modification Tests ---
+
+def test_add_routine_entry():
+    """Test adding a new entry and verifying its presence and sorting."""
+    
+    start_time = "12:15"
+    end_time = "12:20"
+    activity = "Quick Snack Break"
+    
+    # 1. Add the entry
+    result_json = add_routine_entry(start_time, end_time, activity)
+    result_data = json.loads(result_json)
+    
+    assert result_data["status"] == "success"
+    assert "Added Quick Snack Break" in result_data["message"]
+    
+    # 2. Verify it was written to the mock file
+    routine_json_string = get_routine()
+    routine = json.loads(routine_json_string)
+    
+    # Check total count (original 5 + 1 new)
+    assert len(routine) == 6 
+    
+    # Check for the new entry
+    new_entry_found = any(
+        entry["activity"] == activity for entry in routine
+    )
+    assert new_entry_found
+    
+    # Check if the list is still sorted by time (12:15 should be between 11:00 and 12:30)
+    # Find the index of the new entry
+    new_entry_index = [i for i, entry in enumerate(routine) if entry['activity'] == activity][0]
+    
+    # The task before the new one (11:00) should start before 12:15
+    assert parse_time(routine[new_entry_index - 1]['start']) < parse_time(start_time)
+    
+    # The task after the new one (12:30) should start after 12:15
+    assert parse_time(routine[new_entry_index + 1]['start']) > parse_time(start_time)
+
+
+def test_remove_routine_entry():
+    """Test removing an entry based on a keyword match."""
+    
+    keyword = "breakfast"
+    
+    # 1. Remove the entry
+    result_json = remove_routine_entry(keyword)
+    result_data = json.loads(result_json)
+    
+    assert result_data["status"] == "success"
+    assert result_data["removed_count"] == 1
+    
+    # 2. Verify it was removed from the mock file
+    routine_json_string = get_routine()
+    routine = json.loads(routine_json_string)
+    
+    # Check total count (original 5 - 1 removed)
+    assert len(routine) == 4 
+    
+    # Check that the removed activity is definitely gone
+    removed_found = any(
+        keyword.lower() in entry["activity"].lower() for entry in routine
+    )
+    assert not removed_found
+
+
+def test_remove_routine_entry_not_found():
+    """Test removal when the keyword does not match any entry."""
+    
+    keyword = "nonexistent activity"
+    
+    # 1. Attempt to remove the entry
+    result_json = remove_routine_entry(keyword)
+    result_data = json.loads(result_json)
+    
+    assert result_data["status"] == "not_found"
+    
+    # 2. Verify the list size is unchanged (original 5)
+    routine_json_string = get_routine()
+    routine = json.loads(routine_json_string)
+    assert len(routine) == 5
