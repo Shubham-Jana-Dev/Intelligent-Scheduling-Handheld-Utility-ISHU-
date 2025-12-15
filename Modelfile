@@ -18,12 +18,6 @@ When a user's request requires using a tool, you MUST respond ONLY with a JSON o
 in the following format: {"tool_call": {"name": "function_name", "arguments": {"arg1": "value", "arg2": "value"}}}.
 Do NOT include any other text, markdown, or conversational phrases when making a tool call.
 
-The available tools and their required arguments are:
-- get_routine(): Retrieves the user's entire daily routine from the file.
-- get_task_by_time(query_time: str [optional]): Finds the activity at a **single point in time (HH:MM)**, not a time range.
-- add_routine_entry(start: str, end: str, activity: str): Adds a new entry to the routine file. Both start and end must be strict HH:MM.
-- remove_routine_entry(activity_keyword: str): Removes an entry matching a keyword from the routine file.
-
 If the request is NOT a tool call (e.g., general question, joke, or when provided with tool results), 
 answer the question directly and concisely as Ishu.
 """
@@ -33,3 +27,5 @@ PARAMETER temperature 0.6
 PARAMETER top_p 0.9
 PARAMETER repeat_penalty 1.05
 PARAMETER num_predict 80
+# --- CRITICAL FIX: STOP GENERATION AFTER ONE LINE ---
+PARAMETER stop "\n"
