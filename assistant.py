@@ -212,7 +212,7 @@ def save_json(filename, obj):
 def ollama_response(prompt, history=None):
     """
     Sends a prompt to the local Ollama LLM and returns the response. 
-    (Fixed: ensures all returns have 'role' key to prevent crash)
+    (Fixed: ensures all returns have 'role' key to prevent crash and cleans conversational output.)
     """
     print(f"Ollama thinking...")
 
@@ -238,8 +238,25 @@ def ollama_response(prompt, history=None):
         
         if response.status_code == 200:
             data = response.json()
-            # Ensure the fallback message includes the role
-            return data.get("message", {"role": "assistant", "content":"Sorry, the LLM returned an empty response."})
+            message = data.get("message", {"role": "assistant", "content":"Sorry, the LLM returned an empty response."})
+            
+            # --- CRITICAL FIX: POST-PROCESS THE LLM OUTPUT ---
+            content = message.get("content", "")
+            
+            # Find the first occurrence of "User:" or "Assistant:" 
+            # and slice the string to keep only the part before it.
+            # Using regex for a robust check across different capitalizations/formats.
+            match = re.search(r'(\n|\r\n|\r)\s*(User:|Assistant:)', content, re.IGNORECASE)
+            
+            if match:
+                clean_content = content[:match.start()].strip()
+            else:
+                clean_content = content.strip()
+            
+            message["content"] = clean_content
+            # --- END CRITICAL FIX ---
+
+            return message
         else:
             # Ensure all error returns include the role
             return {"role": "assistant", "content": f"Ollama API Error (Code {response.status_code}). Check your model name ({OLLAMA_MODEL}). Response text: {response.text[:100]}..."}
@@ -251,7 +268,6 @@ def ollama_response(prompt, history=None):
         print(f"Unexpected Ollama error: {e}")
         # Ensure unexpected error returns include the role
         return {"role": "assistant", "content": "An unexpected error occurred while processing the LLM request."}
-
 # ========== Routine Features with Robust Time Logic (TOOL FUNCTIONS) ==========
 
 def parse_time(timestr):
