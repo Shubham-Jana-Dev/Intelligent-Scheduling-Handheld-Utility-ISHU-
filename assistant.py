@@ -212,19 +212,18 @@ def save_json(filename, obj):
 def ollama_response(prompt, history=None):
     """
     Sends a prompt to the local Ollama LLM and returns the response. 
-    (Fixed: ensures all returns have 'role' key to prevent crash and cleans conversational output.)
+    (Fixed: Implements post-processing to strip out LLM-hallucinated conversational turns.)
     """
     print(f"Ollama thinking...")
 
+    # Build the messages list for the API call
     if history and len(history) > 0:
         messages = history
     else:
-        messages = [
-            {"role": "system", "content": OLLAMA_SYSTEM_PROMPT},
-            {"role": "user", "content": prompt}
-        ]
+        messages = [{"role": "system", "content": OLLAMA_SYSTEM_PROMPT}]
 
-    if not history or messages[-1].get('content') != prompt:
+    # Only append the new user prompt if it's not already the last message
+    if not messages or messages[-1].get('content') != prompt:
         messages.append({"role": "user", "content": prompt})
             
     payload = {
@@ -244,13 +243,18 @@ def ollama_response(prompt, history=None):
             content = message.get("content", "")
             
             # Find the first occurrence of "User:" or "Assistant:" 
-            # and slice the string to keep only the part before it.
+            # (preceded by a line break) and slice the string to keep only the part before it.
             # Using regex for a robust check across different capitalizations/formats.
+            
+            # This regex looks for a line break (\n) followed by optional whitespace (\s*) and 
+            # then either 'User:' or 'Assistant:'
             match = re.search(r'(\n|\r\n|\r)\s*(User:|Assistant:)', content, re.IGNORECASE)
             
             if match:
+                # If a match is found, trim the content at the start of the line break
                 clean_content = content[:match.start()].strip()
             else:
+                # Otherwise, use the full content
                 clean_content = content.strip()
             
             message["content"] = clean_content
@@ -258,17 +262,14 @@ def ollama_response(prompt, history=None):
 
             return message
         else:
-            # Ensure all error returns include the role
             return {"role": "assistant", "content": f"Ollama API Error (Code {response.status_code}). Check your model name ({OLLAMA_MODEL}). Response text: {response.text[:100]}..."}
 
     except requests.exceptions.ConnectionError:
-        # Ensure connection error returns include the role
         return {"role": "assistant", "content": f"I can't connect to the local LLM. Please make sure Ollama is running on http://localhost:11434 and the model ('{OLLAMA_MODEL}') is created."}
     except Exception as e:
         print(f"Unexpected Ollama error: {e}")
-        # Ensure unexpected error returns include the role
         return {"role": "assistant", "content": "An unexpected error occurred while processing the LLM request."}
-# ========== Routine Features with Robust Time Logic (TOOL FUNCTIONS) ==========
+    # ========== Routine Features with Robust Time Logic (TOOL FUNCTIONS) ==========
 
 def parse_time(timestr):
     # Clean time string (e.g., remove 'PM' or 'AM' if LLM adds it)
