@@ -152,7 +152,7 @@ def listen_whisper():
             return ""
             
     try:
-        # 1. Save the recorded audio to a temporary file
+        # Save the recorded audio to a temporary file
         with open(temp_audio_file, "wb") as f:
             f.write(audio.get_wav_data())
 
@@ -307,7 +307,7 @@ def get_task_by_time(query_time=None):
 
     qt = now_dt.time()
     
-    # 2. Check for task in progress (current task)
+    #  Check for task in progress (current task)
     for slot in routine:
         start = parse_time(slot['start'])
         end = parse_time(slot['end'])
