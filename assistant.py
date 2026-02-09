@@ -61,7 +61,7 @@ WHISPER_MODEL = None
 # ============================================
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
 # --- CRITICAL CHANGE: Switched from "llama3" to your custom model ---
-OLLAMA_MODEL = "ishu-companion" 
+OLLAMA_MODEL = "llama3" 
 
 # NOTE: The full prompt is now managed in the Modelfile, but we keep the structure here for history fallbacks.
 OLLAMA_SYSTEM_PROMPT = """
